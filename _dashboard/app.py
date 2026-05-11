@@ -20,6 +20,7 @@ from data import (
 import universe as bio_universe
 import tech_universe
 import energy_universe
+import trading_journal
 
 ROOT = Path(__file__).parent
 
@@ -34,11 +35,11 @@ ACCENT = "#58a6ff"
 SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
     "Biotechnology": {
         "Red_Medical_Pharmaceutical": (
-            "Red — Medical / Pharmaceutical", "#D7263D",
+            "Red — Medical / Pharmaceutical", "#8b949e",
             ROOT / "Biotechnology" / "Red_Medical_Pharmaceutical",
         ),
         "Green_Agricultural": (
-            "Green — Agricultural", "#2E933C",
+            "Green — Agricultural", "#8b949e",
             ROOT / "Biotechnology" / "Green_Agricultural",
         ),
         "White_Industrial": (
@@ -46,19 +47,19 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
             ROOT / "Biotechnology" / "White_Industrial",
         ),
         "Blue_Marine": (
-            "Blue — Marine", "#1E6FBA",
+            "Blue — Marine", "#8b949e",
             ROOT / "Biotechnology" / "Blue_Marine",
         ),
         "Grey_Environmental": (
-            "Grey — Environmental", "#6C757D",
+            "Grey — Environmental", "#8b949e",
             ROOT / "Biotechnology" / "Grey_Environmental",
         ),
         "Yellow_Food_Nutrition": (
-            "Yellow — Food / Nutrition", "#F4C430",
+            "Yellow — Food / Nutrition", "#8b949e",
             ROOT / "Biotechnology" / "Yellow_Food_Nutrition",
         ),
         "Gold_Bioinformatics": (
-            "Gold — Bioinformatics", "#C9A227",
+            "Gold — Bioinformatics", "#8b949e",
             ROOT / "Biotechnology" / "Gold_Bioinformatics",
         ),
     },
@@ -277,6 +278,12 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
 
 
 def inject_theme() -> None:
+    collapsed = st.session_state.get("sidebar_collapsed", False)
+    collapsed_css = (
+        "section[data-testid='stSidebar'] { display: none !important; }"
+        ".main .block-container { max-width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }"
+        if collapsed else ""
+    )
     st.markdown(
         f"""<style>
         #MainMenu, header, footer {{visibility:hidden;}}
@@ -362,6 +369,21 @@ def inject_theme() -> None:
             display: block;
             margin-top: 6px;
         }}
+        .sb-toggle {{
+            background: transparent !important;
+            border: 1px solid {BORDER} !important;
+            color: {TEXT_PRIMARY} !important;
+            font-size: 1.1rem !important;
+            padding: 2px 8px !important;
+            border-radius: 4px !important;
+            cursor: pointer !important;
+            line-height: 1.4 !important;
+        }}
+        .sb-toggle:hover {{
+            border-color: {ACCENT} !important;
+            color: {TEXT_PRIMARY} !important;
+        }}
+        {collapsed_css}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -474,6 +496,163 @@ def render_catalyst_modal(ticker: str) -> None:
     )
 
 
+def _stat_card(label: str, value: str, color: str) -> None:
+    st.markdown(
+        f"""<div style="
+            background:{CARD_BG};border:1px solid {BORDER};
+            border-radius:6px;padding:14px 16px;text-align:center;
+        ">
+            <div style="font-size:0.72rem;color:{TEXT_MUTED};
+                text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+                {label}
+            </div>
+            <div style="font-size:1.35rem;font-weight:700;color:{color};">
+                {value}
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+def render_trading_journal() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+            <span style="font-size:0.75rem;color:{TEXT_MUTED};
+                text-transform:uppercase;letter-spacing:1px;">
+                Trading Journal
+            </span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{TEXT_PRIMARY};
+            letter-spacing:-0.5px;margin-bottom:24px;">
+            Performance Dashboard
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    trades = trading_journal.load_trades()
+    stats = trading_journal.calculate_stats(trades)
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        _stat_card("Total Trades", str(stats["total_trades"]), TEXT_PRIMARY)
+    with col2:
+        c = "#22c55e" if stats["win_rate"] >= 50 else "#ef4444"
+        _stat_card("Win Rate", f"{stats['win_rate']:.1f}%", c)
+    with col3:
+        c = "#22c55e" if stats["total_pnl"] >= 0 else "#ef4444"
+        p = "+" if stats["total_pnl"] >= 0 else ""
+        _stat_card("Total P&L", f"{p}${stats['total_pnl']:,.2f}", c)
+    with col4:
+        c = "#22c55e" if stats["avg_pnl"] >= 0 else "#ef4444"
+        p = "+" if stats["avg_pnl"] >= 0 else ""
+        _stat_card("Avg P&L", f"{p}${stats['avg_pnl']:,.2f}", c)
+
+    with st.expander("Add New Trade", expanded=True):
+        with st.form("trade_form", clear_on_submit=True):
+            cols = st.columns(4)
+            with cols[0]:
+                trade_date = st.date_input("Date")
+            with cols[1]:
+                ticker = st.text_input("Ticker").upper().strip()
+            with cols[2]:
+                direction = st.selectbox("Direction", ["Long", "Short"])
+            with cols[3]:
+                quantity = st.number_input("Quantity", min_value=1, value=100, step=100)
+            cols2 = st.columns(3)
+            with cols2[0]:
+                entry = st.number_input("Entry Price", min_value=0.01, value=10.0, step=0.01, format="%.2f")
+            with cols2[1]:
+                exit_ = st.number_input("Exit Price", min_value=0.01, value=10.0, step=0.01, format="%.2f")
+            with cols2[2]:
+                tags = st.text_input("Tags (comma-separated)")
+            notes = st.text_area("Notes", height=80)
+            submitted = st.form_submit_button("Save Trade", use_container_width=True)
+            if submitted:
+                if not ticker:
+                    st.error("Ticker is required.")
+                else:
+                    trade = trading_journal.Trade(
+                        date=trade_date.isoformat(),
+                        ticker=ticker,
+                        direction=direction,
+                        entry=entry,
+                        exit=exit_,
+                        quantity=quantity,
+                        notes=notes,
+                        tags=tags,
+                    )
+                    trading_journal.add_trade(trade)
+                    st.success(f"Trade saved: {ticker}")
+                    st.rerun()
+
+    if not trades:
+        st.markdown(
+            f"""<div style="color:{TEXT_SECONDARY};font-size:0.9rem;
+                margin-top:24px;text-align:center;padding:40px 0;">
+                No trades recorded yet. Add your first trade above.
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.markdown(
+        f"""<div style="font-size:1.1rem;font-weight:700;color:{TEXT_PRIMARY};
+            margin:24px 0 12px 0;">Trade History ({len(trades)})</div>""",
+        unsafe_allow_html=True,
+    )
+
+    rows_html = ""
+    for i, t in enumerate(trades):
+        pnl = t.get("pnl", 0)
+        pnl_pct = t.get("pnl_pct", 0)
+        pnl_color = "#22c55e" if pnl >= 0 else "#ef4444"
+        pnl_sign = "+" if pnl >= 0 else ""
+        dir_color = "#22c55e" if t.get("direction") == "Long" else "#ef4444"
+        dir_badge = (
+            f"<span style='color:{dir_color};font-weight:600;font-size:0.8rem;'>"
+            f"{t.get('direction','')}</span>"
+        )
+        rows_html += f"""<tr>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;color:{TEXT_PRIMARY};">{t.get("date","")}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;font-weight:700;color:{TEXT_PRIMARY};">{t.get("ticker","")}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};">{dir_badge}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;color:{TEXT_SECONDARY};">${t.get("entry",0):.2f} → ${t.get("exit",0):.2f}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;color:{TEXT_SECONDARY};">{t.get("quantity",0)}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;font-weight:600;color:{pnl_color};">{pnl_sign}${pnl:,.2f}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.85rem;color:{pnl_color};">{pnl_sign}{pnl_pct:.2f}%</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};font-size:0.8rem;color:{TEXT_MUTED};">{t.get("tags","")}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid {BORDER};text-align:center;">
+                <a href="?delete_trade={i}" style="color:#ef4444;text-decoration:none;font-size:1.1rem;font-weight:700;" title="Delete trade">&times;</a>
+            </td>
+        </tr>"""
+
+    st.markdown(
+        f"""<div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="background:{CARD_BG};">
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Date</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Ticker</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Dir</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Entry → Exit</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Qty</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">P&L</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">P&L %</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:left;">Tags</th>
+                <th style="padding:8px 10px;border-bottom:1px solid {BORDER};color:{TEXT_SECONDARY};font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;text-align:center;width:32px;"></th>
+            </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+        </table>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Clear All Trades", type="secondary", use_container_width=False):
+        trading_journal.clear_all()
+        st.rerun()
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Sierra Trading",
@@ -481,9 +660,19 @@ def main() -> None:
         layout="wide",
     )
 
+    if "sidebar_collapsed" not in st.session_state:
+        st.session_state.sidebar_collapsed = False
+
     inject_theme()
 
-    category_keys = list(SECTORS.keys())
+    top = st.columns([0.04, 0.96])
+    with top[0]:
+        icon = "☰" if st.session_state.sidebar_collapsed else "◀"
+        if st.button(icon, key="sb_toggle", help="Toggle sidebar"):
+            st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+            st.rerun()
+
+    category_keys = list(SECTORS.keys()) + ["Trading Journal"]
 
     with st.sidebar:
         st.markdown(
@@ -502,20 +691,27 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
-        branches = SECTORS[main_cat]
-        branch_labels = [v[0] for v in branches.values()]
-        selected_label = st.sidebar.radio(
-            label="Sub-sector",
-            options=branch_labels,
-            label_visibility="collapsed",
-        )
-        selected_folder = next(k for k, (l, _, _) in branches.items() if l == selected_label)
+        is_journal = main_cat == "Trading Journal"
 
-        st.sidebar.divider()
-        if st.sidebar.button("Refresh Quotes"):
-            st.cache_data.clear()
-            st.rerun()
-        st.sidebar.caption(f"Last load: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        if not is_journal:
+            branches = SECTORS[main_cat]
+            branch_labels = [v[0] for v in branches.values()]
+            selected_label = st.sidebar.radio(
+                label="Sub-sector",
+                options=branch_labels,
+                label_visibility="collapsed",
+            )
+            selected_folder = next(
+                k for k, (l, _, _) in branches.items() if l == selected_label
+            )
+
+            st.sidebar.divider()
+            if st.sidebar.button("Refresh Quotes"):
+                st.cache_data.clear()
+                st.rerun()
+            st.sidebar.caption(
+                f"Last load: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
 
         st.sidebar.markdown(
             f"""<div class="sidebar-quote">
@@ -524,6 +720,16 @@ def main() -> None:
             </div>""",
             unsafe_allow_html=True,
         )
+
+    delete_idx = st.query_params.get("delete_trade")
+    if delete_idx and delete_idx.isdigit():
+        trading_journal.delete_trade(int(delete_idx))
+        st.query_params.clear()
+        st.rerun()
+
+    if is_journal:
+        render_trading_journal()
+        return
 
     if main_cat == "Biotechnology":
         uni_mod = bio_universe
