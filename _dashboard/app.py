@@ -278,12 +278,6 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
 
 
 def inject_theme() -> None:
-    collapsed = st.session_state.get("sidebar_collapsed", False)
-    collapsed_css = (
-        "section[data-testid='stSidebar'] { display: none !important; }"
-        ".main .block-container { max-width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }"
-        if collapsed else ""
-    )
     st.markdown(
         f"""<style>
         #MainMenu, header, footer {{visibility:hidden;}}
@@ -369,21 +363,6 @@ def inject_theme() -> None:
             display: block;
             margin-top: 6px;
         }}
-        .sb-toggle {{
-            background: transparent !important;
-            border: 1px solid {BORDER} !important;
-            color: {TEXT_PRIMARY} !important;
-            font-size: 1.1rem !important;
-            padding: 2px 8px !important;
-            border-radius: 4px !important;
-            cursor: pointer !important;
-            line-height: 1.4 !important;
-        }}
-        .sb-toggle:hover {{
-            border-color: {ACCENT} !important;
-            color: {TEXT_PRIMARY} !important;
-        }}
-        {collapsed_css}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -660,17 +639,7 @@ def main() -> None:
         layout="wide",
     )
 
-    if "sidebar_collapsed" not in st.session_state:
-        st.session_state.sidebar_collapsed = False
-
     inject_theme()
-
-    top = st.columns([0.04, 0.96])
-    with top[0]:
-        icon = "☰" if st.session_state.sidebar_collapsed else "◀"
-        if st.button(icon, key="sb_toggle", help="Toggle sidebar"):
-            st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
-            st.rerun()
 
     category_keys = list(SECTORS.keys()) + ["Trading Journal"]
 
