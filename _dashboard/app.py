@@ -19,6 +19,7 @@ from data import (
 )
 import universe as bio_universe
 import tech_universe
+import energy_universe
 
 ROOT = Path(__file__).parent
 
@@ -97,6 +98,28 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "IT_Services": (
             "IT Services", "#8b949e",
             ROOT / "Technology" / "IT_Services",
+        ),
+    },
+    "Energy": {
+        "Exploration_Production": (
+            "Exploration & Production", "#f97316",
+            ROOT / "Energy" / "Exploration_Production",
+        ),
+        "Oilfield_Services_Equipment": (
+            "Oilfield Services & Equipment", "#d97706",
+            ROOT / "Energy" / "Oilfield_Services_Equipment",
+        ),
+        "Midstream": (
+            "Midstream", "#ea580c",
+            ROOT / "Energy" / "Midstream",
+        ),
+        "Renewable_Energy": (
+            "Renewable Energy", "#22c55e",
+            ROOT / "Energy" / "Renewable_Energy",
+        ),
+        "Coal_Uranium": (
+            "Coal & Uranium", "#6b7280",
+            ROOT / "Energy" / "Coal_Uranium",
         ),
     },
 }
@@ -504,6 +527,8 @@ def main() -> None:
 
     if main_cat == "Biotechnology":
         uni_mod = bio_universe
+    elif main_cat == "Energy":
+        uni_mod = energy_universe
     else:
         uni_mod = tech_universe
 
