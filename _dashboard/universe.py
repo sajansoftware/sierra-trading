@@ -153,14 +153,62 @@ INFO: dict[str, CompanyInfo] = {
 }
 
 
+def _screener_universe() -> dict[str, list[str]]:
+    """Pull NASDAQ candidates, classify by industry, return folder -> tickers.
+
+    Best-effort: if the NASDAQ API is unreachable we silently fall back to
+    an empty screener set (curated INFO still applies).
+    """
+    try:
+        from screener import biotech_candidates
+        from classify import classify
+    except Exception:
+        return {f: [] for f in FOLDERS}
+
+    out: dict[str, list[str]] = {f: [] for f in FOLDERS}
+    try:
+        candidates = biotech_candidates()
+    except Exception:
+        return out
+
+    for row in candidates:
+        sym = row["symbol"]
+        if sym in INFO:  # curated entry already covers this ticker
+            continue
+        # Classify on industry + name only (no business summary at this stage)
+        cats = classify(row["sector"], row["industry"], row["name"], "")
+        for cat in cats:
+            if cat in out:
+                out[cat].append(sym)
+    return out
+
+
 def UNIVERSE() -> dict[str, list[str]]:
-    """Invert INFO into folder -> list of tickers."""
+    """Curated INFO categories merged with screener-discovered tickers."""
     out: dict[str, list[str]] = {f: [] for f in FOLDERS}
     for ticker, info in INFO.items():
         for cat in info.categories:
             out[cat].append(ticker)
+    for cat, syms in _screener_universe().items():
+        out[cat].extend(syms)
+    # De-dupe while preserving order (curated first)
+    for cat in out:
+        seen: set[str] = set()
+        deduped = []
+        for s in out[cat]:
+            if s not in seen:
+                seen.add(s)
+                deduped.append(s)
+        out[cat] = deduped
     return out
 
 
 def all_tickers() -> list[str]:
-    return list(INFO.keys())
+    seen: set[str] = set(INFO.keys())
+    out: list[str] = list(INFO.keys())
+    for syms in _screener_universe().values():
+        for s in syms:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+    return out

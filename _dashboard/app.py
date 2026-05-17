@@ -15,6 +15,7 @@ from data import (
     Quote,
     fetch_catalysts,
     filtered_by_category,
+    short_blurb,
     tv_num,
 )
 import universe as bio_universe
@@ -140,7 +141,10 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
         if meta is not None:
             company = f"{meta.name} — {meta.blurb}"
         else:
-            company = q.industry or ""
+            # Screener-discovered ticker: fall back to yfinance metadata
+            name = (q.name or q.ticker).strip()
+            blurb = short_blurb(q.summary) or (q.industry or "")
+            company = f"{name} — {blurb}" if blurb else name
         ticker_html = (
             f'<a href="?ticker={q.ticker}" '
             f'style="color:{TEXT_PRIMARY};text-decoration:none;font-weight:700;">'

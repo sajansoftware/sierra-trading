@@ -33,6 +33,8 @@ class Quote:
     market_cap: int | None
     sector: str | None
     industry: str | None
+    name: str | None = None          # company short/long name from yfinance
+    summary: str | None = None       # longBusinessSummary from yfinance
     error: str | None = None
 
     @property
@@ -89,9 +91,27 @@ def _fetch_one(ticker: str) -> Quote:
             market_cap=info.get("marketCap"),
             sector=info.get("sector"),
             industry=info.get("industry"),
+            name=info.get("shortName") or info.get("longName"),
+            summary=info.get("longBusinessSummary"),
         )
     except Exception as exc:
         return Quote(ticker, None, None, None, None, None, None, error=str(exc)[:120])
+
+
+def short_blurb(summary: str | None) -> str:
+    """First sentence of a yfinance business summary, capped at ~180 chars."""
+    if not summary:
+        return ""
+    chunk = summary.strip()
+    for sep in (". ", "\n", ";"):
+        idx = chunk.find(sep)
+        if 30 < idx < 220:
+            chunk = chunk[:idx]
+            break
+    chunk = chunk.strip().rstrip(".")
+    if len(chunk) > 180:
+        chunk = chunk[:177].rstrip() + "..."
+    return chunk + "." if chunk else ""
 
 
 @st.cache_data(ttl=900, show_spinner=False)
