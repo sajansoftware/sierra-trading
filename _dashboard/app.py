@@ -400,13 +400,18 @@ def catalyst_dialog(ticker: str) -> None:
             r["title"] if r["title"]
             else f"<span style='color:#64748b;'>—</span>"
         )
-        source_html = (
-            f"<a href='{r['link']}' target='_blank' "
-            f"style='color:{ACCENT};text-decoration:none;font-size:0.78rem;'>"
-            f"View ↗</a>"
-            if r["link"]
-            else f"<span style='color:#64748b;font-size:0.78rem;'>—</span>"
-        )
+        source_label = r.get("source") or "—"
+        if r["link"] and source_label != "—":
+            source_html = (
+                f"<a href='{r['link']}' target='_blank' "
+                f"style='color:{ACCENT};text-decoration:none;font-size:0.78rem;"
+                f"white-space:nowrap;'>{source_label} ↗</a>"
+            )
+        else:
+            source_html = (
+                f"<span style='color:#64748b;font-size:0.78rem;'>"
+                f"{source_label}</span>"
+            )
         up = r["upside_pct"]
         up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
         body_rows.append(

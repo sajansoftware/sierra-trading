@@ -175,19 +175,30 @@ def fetch_5y_catalysts(
         & (rvol >= min_rvol)
     )
 
-    # Recent yfinance news (last ~30 days)
-    news_by_date: dict[date, list[dict]] = {}
+    # Multi-source news index. Finviz (~1-2y of headlines with publisher
+    # names) + Yahoo RSS (last ~30-60d). yfinance.news layered in on top
+    # for free since we already have the Ticker object.
+    try:
+        from news_sources import combined_news_by_date
+        news_idx = combined_news_by_date(ticker)
+    except Exception:
+        news_idx = {}
     try:
         for article in (t.news or []):
-            ts = article.get("providerPublishTime")
-            if not ts:
+            ts_ = article.get("providerPublishTime")
+            if not ts_:
                 continue
-            d = datetime.fromtimestamp(ts).date()
-            news_by_date.setdefault(d, []).append(article)
+            d_ = datetime.fromtimestamp(ts_).date()
+            news_idx.setdefault(d_, []).append({
+                "date":   d_,
+                "title":  article.get("title", "") or "",
+                "link":   article.get("link", "") or "",
+                "source": "Yahoo (yfinance)",
+            })
     except Exception:
-        news_by_date = {}
+        pass
 
-    # Historical 8-K filings from SEC EDGAR (5-year window)
+    # Historical 8-K filings from SEC EDGAR (full 5-year window)
     try:
         from edgar import fetch_8k_filings, filings_by_date
         filings_idx = filings_by_date(fetch_8k_filings(ticker, years_back=5))
@@ -199,41 +210,54 @@ def fetch_5y_catalysts(
         d = ts.date() if hasattr(ts, "date") else ts
         bar = hist.loc[ts]
 
-        # Prefer yfinance news (it carries the actual press-release headline),
-        # then fall back to an 8-K filed on the same day or 1 trading day prior.
         title = ""
         link = ""
+        source = ""
         ctype = ""
-        matched_news = news_by_date.get(d, [])
-        if matched_news:
-            best = matched_news[0]
-            title = best.get("title", "") or ""
-            link = best.get("link", "") or ""
+
+        # 1) Try the multi-source news index in a tight ±2-day window.
+        #    Press releases sometimes hit the wire the trading day before
+        #    the price reaction, or land after-hours on the day of.
+        best_news = None
+        best_news_offset = 99
+        for offset in (0, 1, -1, 2, -2):
+            for item in news_idx.get(d + timedelta(days=offset), []):
+                if abs(offset) < best_news_offset:
+                    best_news = item
+                    best_news_offset = abs(offset)
+                    break
+        if best_news:
+            title = best_news["title"]
+            link = best_news["link"]
+            source = best_news["source"]
             ctype = classify_catalyst(title)
-        else:
-            # 8-Ks must be filed within 4 business days of the event, but news
-            # can also leak 1-2 days before the formal filing. Scan a ±5 day
-            # window and take the closest match.
+
+        # 2) Fall back to the nearest SEC 8-K within ±5 trading days.
+        if not title:
             best_f = None
-            best_offset = 99
+            best_f_offset = 99
             for offset in range(-5, 8):
-                check_d = d + timedelta(days=offset)
-                filings = filings_idx.get(check_d, [])
-                if filings and abs(offset) < best_offset:
+                filings = filings_idx.get(d + timedelta(days=offset), [])
+                if filings and abs(offset) < best_f_offset:
                     best_f = filings[0]
-                    best_offset = abs(offset)
+                    best_f_offset = abs(offset)
             if best_f:
                 title = best_f["description"]
                 link = best_f["link"]
+                source = "SEC EDGAR"
                 ctype = best_f["type"]
-            else:
-                ctype = "News"
+
+        if not ctype:
+            ctype = "News"
+        if not source:
+            source = "—"
 
         rows.append({
             "date":       d,
             "type":       ctype,
             "title":      title,
             "link":       link,
+            "source":     source,
             "low":        float(bar["Low"]),
             "high":       float(bar["High"]),
             "close":      float(bar["Close"]),
