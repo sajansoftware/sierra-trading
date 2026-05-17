@@ -330,8 +330,10 @@ CATALYST_TYPE_COLOR = {
     "Patent":         "#94a3b8",
     "Insider":        "#94a3b8",
     "Analyst":        "#94a3b8",
+    "Restructuring":  "#f97316",
+    "Bankruptcy":     "#ef4444",
+    "Auditor":        "#94a3b8",
     "News":           "#94a3b8",
-    "Big move":       "#475569",
 }
 
 

@@ -136,7 +136,7 @@ def fetch_5y_catalysts(
     min_price: float = 1.0,
     max_price: float = 20.0,
     min_rvol: float = 5.0,
-    min_upside_pct: float = 10.0,
+    min_upside_pct: float = 50.0,
     max_rows: int = 60,
 ) -> list[dict]:
     """Detect catalyst days in the last 5 years of trading.
@@ -175,7 +175,7 @@ def fetch_5y_catalysts(
         & (rvol >= min_rvol)
     )
 
-    # Collect news by date for enrichment (yfinance only carries recent items)
+    # Recent yfinance news (last ~30 days)
     news_by_date: dict[date, list[dict]] = {}
     try:
         for article in (t.news or []):
@@ -187,20 +187,51 @@ def fetch_5y_catalysts(
     except Exception:
         news_by_date = {}
 
+    # Historical 8-K filings from SEC EDGAR (5-year window)
+    try:
+        from edgar import fetch_8k_filings, filings_by_date
+        filings_idx = filings_by_date(fetch_8k_filings(ticker, years_back=5))
+    except Exception:
+        filings_idx = {}
+
     rows: list[dict] = []
     for ts in hist.index[mask]:
         d = ts.date() if hasattr(ts, "date") else ts
         bar = hist.loc[ts]
-        matched = news_by_date.get(d, [])
+
+        # Prefer yfinance news (it carries the actual press-release headline),
+        # then fall back to an 8-K filed on the same day or 1 trading day prior.
         title = ""
         link = ""
-        if matched:
-            best = matched[0]
+        ctype = ""
+        matched_news = news_by_date.get(d, [])
+        if matched_news:
+            best = matched_news[0]
             title = best.get("title", "") or ""
             link = best.get("link", "") or ""
+            ctype = classify_catalyst(title)
+        else:
+            # 8-Ks must be filed within 4 business days of the event, but news
+            # can also leak 1-2 days before the formal filing. Scan a ±5 day
+            # window and take the closest match.
+            best_f = None
+            best_offset = 99
+            for offset in range(-5, 8):
+                check_d = d + timedelta(days=offset)
+                filings = filings_idx.get(check_d, [])
+                if filings and abs(offset) < best_offset:
+                    best_f = filings[0]
+                    best_offset = abs(offset)
+            if best_f:
+                title = best_f["description"]
+                link = best_f["link"]
+                ctype = best_f["type"]
+            else:
+                ctype = "News"
+
         rows.append({
             "date":       d,
-            "type":       classify_catalyst(title),
+            "type":       ctype,
             "title":      title,
             "link":       link,
             "low":        float(bar["Low"]),

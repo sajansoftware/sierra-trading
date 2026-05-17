@@ -51,22 +51,30 @@ HEALTHCARE_INDUSTRIES: set[str] = {
     "Hospital/Nursing Management",
 }
 
-# Non-healthcare industries worth scanning for biotech-relevant names.
-# Each ticker in these industries gets a keyword check before inclusion.
-NON_HEALTHCARE_CANDIDATES: set[str] = {
+# Industries where every member is biotech-relevant (no keyword filter).
+# These cleanly map to one of the biotech color categories.
+NON_HC_INCLUDE_ALL: set[str] = {
     "Agricultural Chemicals",
     "Farming/Seeds/Milling",
+    "Environmental Services",
+    "Water Supply",
+}
+
+# Catch-all industries where keyword match in the company name is required
+# (most members are unrelated petrochemicals, shipping, packaged food, etc.).
+NON_HC_KEYWORD_REQUIRED: set[str] = {
     "Major Chemicals",
     "Specialty Chemicals",
     "Marine Transportation",
-    "Environmental Services",
-    "Water Supply",
     "Packaged Foods",
     "Beverages (Production/Distribution)",
     "Specialty Foods",
     "Food Distributors",
     "Meat/Poultry/Fish",
 }
+
+# Backwards-compat union (referenced elsewhere historically)
+NON_HEALTHCARE_CANDIDATES: set[str] = NON_HC_INCLUDE_ALL | NON_HC_KEYWORD_REQUIRED
 
 # Keywords used to admit a non-healthcare ticker into the biotech universe
 BIOTECH_KEYWORDS = re.compile(
@@ -118,7 +126,9 @@ def is_biotech_relevant(row: dict) -> bool:
     name = row.get("name") or ""
     if sector == "Health Care" and industry in HEALTHCARE_INDUSTRIES:
         return True
-    if industry in NON_HEALTHCARE_CANDIDATES and BIOTECH_KEYWORDS.search(name):
+    if industry in NON_HC_INCLUDE_ALL:
+        return True
+    if industry in NON_HC_KEYWORD_REQUIRED and BIOTECH_KEYWORDS.search(name):
         return True
     return False
 
