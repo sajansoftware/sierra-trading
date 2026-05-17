@@ -228,8 +228,15 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
             name = (q.name or q.ticker).strip()
             blurb = short_blurb(q.summary) or (q.industry or "")
             company = f"{name} — {blurb}" if blurb else name
+        # Same-window link: only this cell is clickable, so clicking
+        # anywhere else in the row does nothing.
+        ticker_link = (
+            f"<a href='?ticker={q.ticker}' target='_self' "
+            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
+            f"border-bottom:1px dotted {ACCENT};'>{q.ticker}</a>"
+        )
         out.append({
-            "Ticker":      q.ticker,
+            "Ticker":      ticker_link,
             "Close":       q.close,
             "Float":       q.float_shares,
             "Mkt Cap":     q.market_cap,
@@ -260,16 +267,47 @@ def _float_bg(v: float) -> str:
 
 
 def style_table(df: pd.DataFrame):
-    """Pandas Styler for use with st.dataframe (cell-level styles only)."""
     if df.empty:
         return df
     s = df.style.format({
+        "Ticker":  lambda v: v,                      # already HTML anchor
         "Close":   lambda v: f"${v:.2f}" if pd.notna(v) else "—",
         "Float":   tv_num,
         "Mkt Cap": tv_num,
-    })
+    }, escape=None)
     s = s.map(_float_bg, subset=["Float"])
     s = s.map(_price_color, subset=["Close"])
+    s = s.set_properties(subset=["Ticker"], **{
+        "font-weight": "700", "color": WHITE, "text-align": "left",
+    })
+    s = s.set_properties(**{"text-align": "right", "color": WHITE_DIM})
+    s = s.set_properties(subset=["Ticker"], **{"text-align": "left"})
+    s = s.set_properties(subset=["Description"], **{
+        "text-align": "left", "color": WHITE_MUTE,
+        "font-size": "0.85rem", "max-width": "440px",
+        "white-space": "normal", "line-height": "1.4",
+    })
+    s = s.set_table_styles([
+        {"selector": "th",
+         "props": f"background-color:{NAVY_CARD}; color:{WHITE}; "
+                  "font-weight:600; text-align:right; padding:10px 14px; "
+                  f"border-bottom:1px solid {BORDER}; font-size:0.78rem; "
+                  "text-transform:uppercase; letter-spacing:0.5px;"},
+        {"selector": "th.col_heading.level0:nth-child(1), "
+                     "th.col_heading.level0:nth-child(5)",
+         "props": "text-align:left;"},
+        {"selector": "td",
+         "props": f"padding:9px 14px; font-size:0.9rem; "
+                  f"vertical-align:top; border-bottom:1px solid {BORDER};"},
+        {"selector": "tbody tr:nth-child(even)",
+         "props": f"background-color:rgba(255,255,255,0.02);"},
+        {"selector": "tbody tr:hover",
+         "props": f"background-color:{NAVY_HOVER};"},
+        {"selector": "",
+         "props": "border-collapse:collapse; width:100%; "
+                  f"border:1px solid {BORDER}; border-radius:6px; overflow:hidden;"},
+    ])
+    s = s.hide(axis="index")
     return s
 
 
@@ -299,7 +337,6 @@ CATALYST_TYPE_COLOR = {
 
 def _close_dialog() -> None:
     st.session_state.selected_ticker = None
-    st.session_state.table_version = st.session_state.get("table_version", 0) + 1
 
 
 @st.dialog("Catalysts", width="large")
@@ -430,31 +467,9 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
         st.info("No tickers in this category currently pass the filter.")
         return
 
-    st.caption("Click a row to open the 5-year catalyst archive.")
+    st.caption("Click any ticker symbol to open its 5-year catalyst archive.")
     df = quotes_to_df(rows, info)
-    styled = style_table(df)
-    # Bumped on dialog close so the previous row selection is forgotten
-    table_version = st.session_state.get("table_version", 0)
-    event = st.dataframe(
-        styled,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        key=f"sector_table_{folder}_{table_version}",
-        column_config={
-            "Ticker":      st.column_config.TextColumn(width="small"),
-            "Close":       st.column_config.TextColumn(width="small"),
-            "Float":       st.column_config.TextColumn(width="small"),
-            "Mkt Cap":     st.column_config.TextColumn(width="small"),
-            "Description": st.column_config.TextColumn(width="large"),
-        },
-    )
-    if event and event.selection and event.selection.rows:
-        idx = event.selection.rows[0]
-        clicked = df.iloc[idx]["Ticker"]
-        st.session_state.selected_ticker = clicked
-        st.rerun()
+    st.markdown(style_table(df).to_html(), unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -771,8 +786,13 @@ def main() -> None:
         st.session_state.selected_ticker = None
     if "view" not in st.session_state:
         st.session_state.view = "sector"
-    if "table_version" not in st.session_state:
-        st.session_state.table_version = 0
+
+    # Ticker click -> ?ticker=XXX. Capture, set session state, then clear
+    # the URL so refreshing or closing the dialog doesn't re-open it.
+    qp_ticker = st.query_params.get("ticker")
+    if qp_ticker:
+        st.session_state.selected_ticker = qp_ticker.strip().upper()
+        st.query_params.clear()
 
     def _reset_view():
         st.session_state.view = "sector"
