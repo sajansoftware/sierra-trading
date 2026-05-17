@@ -31,6 +31,7 @@ import universe as bio_universe
 import tech_universe
 import energy_universe
 import trading_journal
+from ipo_calendar import fetch_ipo_calendar, IPO
 
 ROOT = Path(__file__).parent
 
@@ -507,6 +508,123 @@ def render_journal() -> None:
 
 
 # =============================================================================
+# IPO calendar
+# =============================================================================
+SECTOR_BADGE_COLOR = {
+    "Biotechnology": "#ef4444",
+    "Technology":    "#64b5f6",
+    "Energy":        "#f97316",
+    "Other":         "#94a3b8",
+}
+STATUS_COLOR = {
+    "Upcoming": "#facc15",
+    "Priced":   "#22c55e",
+    "Filed":    "#94a3b8",
+}
+
+
+def _ipo_row(ipo: IPO) -> str:
+    status_col = STATUS_COLOR.get(ipo.status, WHITE_MUTE)
+    deal = f"${ipo.deal_size/1e6:.1f}M" if ipo.deal_size else "—"
+    shares = tv_num(ipo.shares) if ipo.shares else "—"
+    date_str = ipo.expected_date or "—"
+    exch = ipo.exchange or "—"
+    return (
+        f"<tr>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"font-weight:700;color:{WHITE};'>{ipo.ticker}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE_DIM};'>{ipo.company}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE};text-align:right;'>{ipo.price_display}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE_DIM};text-align:right;'>{shares}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE_DIM};text-align:right;'>{deal}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE_MUTE};'>{date_str}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE_MUTE};'>{exch}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};'>"
+        f"<span style='background:{status_col};color:#06121e;font-weight:700;"
+        f"font-size:0.7rem;padding:3px 8px;border-radius:4px;'>{ipo.status}</span></td>"
+        f"</tr>"
+    )
+
+
+def _ipo_section(sector: str, rows: list[IPO]) -> None:
+    badge = SECTOR_BADGE_COLOR.get(sector, ACCENT)
+    st.markdown(
+        f"""<div style="display:flex;align-items:baseline;gap:10px;
+            margin:22px 0 10px;">
+          <span style="background:{badge};color:#06121e;font-weight:700;
+            padding:3px 10px;border-radius:4px;font-size:0.78rem;">{sector}</span>
+          <span style="color:{WHITE_MUTE};font-size:0.8rem;">{len(rows)} IPO(s)</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    if not rows:
+        st.markdown(
+            f"<div style='color:{WHITE_MUTE};font-size:0.85rem;"
+            f"padding:8px 0;'>No upcoming IPOs in this sector currently "
+            "have a proposed price between $1 and $20.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    head_cells = "".join(
+        f"<th style='padding:10px 14px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD};color:{WHITE};font-weight:600;"
+        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Ticker","left"), ("Company","left"), ("Price","right"),
+            ("Shares","right"), ("Deal Size","right"),
+            ("Expected","left"), ("Exch","left"), ("Status","left"),
+        ]
+    )
+    body = "".join(_ipo_row(r) for r in rows)
+    st.markdown(
+        f"""<table style="width:100%;border-collapse:collapse;
+            border:1px solid {BORDER};border-radius:6px;overflow:hidden;">
+          <thead><tr>{head_cells}</tr></thead>
+          <tbody>{body}</tbody>
+        </table>""",
+        unsafe_allow_html=True,
+    )
+
+
+def render_ipo_calendar() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">IPO Calendar</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:4px;">Upcoming IPOs</div>
+        <div style="font-size:0.9rem;color:{WHITE_DIM};margin-bottom:18px;">
+          Proposed price ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
+          Source: NASDAQ IPO calendar &nbsp;·&nbsp; 6h cache</div>""",
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Loading IPO calendar…"):
+        by_sector = fetch_ipo_calendar(min_price=MIN_PRICE, max_price=MAX_PRICE)
+
+    total = sum(len(rows) for rows in by_sector.values())
+    if total == 0:
+        st.info(
+            "No upcoming or recently priced IPOs currently have a "
+            f"proposed price between ${MIN_PRICE:.0f} and ${MAX_PRICE:.0f}. "
+            "Pipeline (TBD-priced filings) is excluded by design."
+        )
+        return
+
+    for sec in ("Biotechnology", "Technology", "Energy", "Other"):
+        _ipo_section(sec, by_sector.get(sec, []))
+
+
+# =============================================================================
 # Main
 # =============================================================================
 def main() -> None:
@@ -520,6 +638,11 @@ def main() -> None:
 
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
+    if "view" not in st.session_state:
+        st.session_state.view = "sector"
+
+    def _reset_view():
+        st.session_state.view = "sector"
 
     category_keys = list(SECTORS.keys()) + ["Trading Journal"]
 
@@ -539,6 +662,7 @@ def main() -> None:
             options=category_keys,
             label_visibility="collapsed",
             key="main_cat",
+            on_change=_reset_view,
         )
 
         is_journal = main_cat == "Trading Journal"
@@ -552,13 +676,23 @@ def main() -> None:
                 options=branch_labels,
                 label_visibility="collapsed",
                 key=f"sub_{main_cat}",
+                on_change=_reset_view,
             )
             selected_folder = next(
                 k for k, (l, _, _) in branches.items() if l == selected_label
             )
 
             st.divider()
-            if st.button("Refresh quotes", use_container_width=True):
+            if st.button(
+                "📅 IPO Calendar",
+                use_container_width=True,
+                key="ipo_calendar_btn",
+                type="primary" if st.session_state.view == "ipo" else "secondary",
+            ):
+                st.session_state.view = "ipo"
+                st.rerun()
+
+            if st.button("Refresh quotes", use_container_width=True, key="refresh_btn"):
                 st.cache_data.clear()
                 st.toast("Quotes cache cleared.")
                 st.rerun()
@@ -581,6 +715,10 @@ def main() -> None:
 
     if is_journal:
         render_journal()
+        return
+
+    if st.session_state.view == "ipo":
+        render_ipo_calendar()
         return
 
     uni_mod = {
