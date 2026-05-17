@@ -46,25 +46,23 @@ class CompanyInfo:
 
 INFO: dict[str, CompanyInfo] = {
     # ---------- Red: medical / pharmaceutical ----------
-    "APLT": CompanyInfo("Applied Therapeutics",  "Aldose-reductase inhibitors for galactosemia and diabetic complications.", (RED,)),
+    # Note: 18 confirmed-delisted / acquired / no-yfinance-data tickers
+    # have been pruned (Apr 2026 audit). Live filter dropped them anyway.
     "OCGN": CompanyInfo("Ocugen",                "Modifier-gene therapies and vaccines for retinal diseases.",                (RED,)),
     "INMB": CompanyInfo("INmune Bio",            "Innate-immunity modulators for cancer and Alzheimer's (XPro, INKmune).",     (RED,)),
     "ONCY": CompanyInfo("Oncolytics Biotech",    "Oncolytic-virus immunotherapy pelareorep for solid tumors.",                (RED,)),
     "SLNO": CompanyInfo("Soleno Therapeutics",   "DCCR (Vykat) for hyperphagia in Prader-Willi syndrome.",                    (RED,)),
     "FENC": CompanyInfo("Fennec Pharmaceuticals","PEDMARK to prevent cisplatin-induced ototoxicity in pediatric cancer.",     (RED,)),
     "CRMD": CompanyInfo("CorMedix",              "DefenCath antimicrobial catheter-lock solution for hemodialysis.",          (RED,)),
-    "CYCC": CompanyInfo("Cyclacel Pharmaceuticals","Oncology kinase inhibitors (fadraciclib, plogosertib).",                  (RED,)),
     "KZIA": CompanyInfo("Kazia Therapeutics",    "Paxalisib (PI3K/mTOR) for glioblastoma and brain metastases.",              (RED,)),
     "SNGX": CompanyInfo("Soligenix",             "HyBryte for cutaneous T-cell lymphoma; rare-disease and vaccine platform.", (RED,)),
     "TENX": CompanyInfo("Tenax Therapeutics",    "Levosimendan for pulmonary hypertension with heart failure.",               (RED,)),
     "MNPR": CompanyInfo("Monopar Therapeutics",  "Radiopharmaceuticals and oncology candidates (MNPR-101, Validive).",        (RED,)),
     "PHIO": CompanyInfo("Phio Pharmaceuticals",  "INTASYL self-delivering RNAi for immuno-oncology.",                          (RED,)),
-    "GRTS": CompanyInfo("Gritstone bio",         "Personalized-neoantigen mRNA cancer and HIV vaccines.",                     (RED,)),
     "CRBP": CompanyInfo("Corbus Pharmaceuticals","Antibody-drug conjugates and oncology biologics.",                          (RED,)),
-    "NRBO": CompanyInfo("NeuroBo Pharmaceuticals","Cardiometabolic and CNS therapeutics (DA-1241, DA-1726).",                  (RED,)),
     "MIST": CompanyInfo("Milestone Pharmaceuticals","Etripamil nasal spray for paroxysmal SVT and atrial fibrillation.",     (RED,)),
-    "ATAI": CompanyInfo("ATAI Life Sciences",    "Psychedelic and mental-health therapeutics platform.",                       (RED,)),
-    "KPRX": CompanyInfo("Kiromic Biopharma",     "Allogeneic gamma-delta T-cell therapies for solid tumors.",                  (RED,)),
+    "ATAI": CompanyInfo("AtaiBeckley",            "Psychedelic and mental-health therapeutics platform (post Beckley Psytech merger).", (RED,)),
+    "KPRX": CompanyInfo("Kiora Pharmaceuticals", "KIO-301 photoswitch for inherited retinal disease and MPP-3 antagonist KIO-104.",     (RED,)),
     "INM":  CompanyInfo("InMed Pharmaceuticals", "Rare-cannabinoid drug candidates for ocular and CNS disease.",               (RED,)),
     "VINC": CompanyInfo("Vincerx Pharma",        "Bioconjugation oncology platform (enitociclib, VIP236).",                    (RED,)),
     "HEPA": CompanyInfo("Hepion Pharmaceuticals","Rencofilstat (cyclophilin inhibitor) for NASH and liver disease.",          (RED,)),
@@ -73,10 +71,8 @@ INFO: dict[str, CompanyInfo] = {
     "VYNE": CompanyInfo("VYNE Therapeutics",     "Topical BET inhibitors for immuno-inflammatory dermatology.",                (RED,)),
     "ZYME": CompanyInfo("Zymeworks",             "Bispecific antibodies and ADCs (zanidatamab for HER2+ cancers).",            (RED,)),
     "XBIO": CompanyInfo("Xenetic Biosciences",   "DNase-based oncology platform targeting NETs in tumors.",                    (RED,)),
-    "ONVO": CompanyInfo("Organovo Holdings",     "3D-bioprinted tissue therapeutics, lead in IBD.",                            (RED,)),
     "RGC":  CompanyInfo("Regencell Bioscience",  "Traditional Chinese-medicine-based therapeutics for ADHD and autism.",       (RED,)),
-    "LIPO": CompanyInfo("Lipocine",              "Oral testosterone (TLANDO) and other prodrug formulations.",                 (RED,)),
-    "PRTG": CompanyInfo("Portage Biotech",       "Immuno-oncology pipeline (iNKT cell, adenosine pathway).",                   (RED,)),
+    "LIPO": CompanyInfo("Lipella Pharmaceuticals","Clinical-stage drug-reformulation platform for unmet needs in urology and oncology.", (RED,)),
     "CGEM": CompanyInfo("Cullinan Therapeutics", "Targeted oncology and autoimmune bispecifics (zipalertinib, CLN-978).",      (RED,)),
     "ANIX": CompanyInfo("Anixa Biosciences",     "Breast-cancer vaccine and CAR-T for ovarian cancer.",                        (RED,)),
     "BCDA": CompanyInfo("BioCardia",             "Autologous cardiac stem-cell therapy CardiAMP for heart failure.",           (RED,)),
@@ -85,10 +81,7 @@ INFO: dict[str, CompanyInfo] = {
     "BIVI": CompanyInfo("BioVie",                "NE3107 for Alzheimer's and Parkinson's; bezisterim platform.",               (RED,)),
     "BPTH": CompanyInfo("Bio-Path Holdings",     "Antisense DNAbilize platform; prexigebersen for AML.",                       (RED,)),
     "CLRB": CompanyInfo("Cellectar Biosciences", "Iopofosine I-131 radiopharmaceutical for hematologic cancers.",              (RED,)),
-    "CMRX": CompanyInfo("Chimerix",              "Dordaviprone (ONC201) for H3 K27M-mutant glioma.",                            (RED,)),
     "CNTB": CompanyInfo("Connect Biopharma",     "Rademikibart (IL-4Rα) for asthma and atopic dermatitis.",                    (RED,)),
-    "CYTO": CompanyInfo("Altamira Therapeutics", "Intranasal RNA delivery (SemaPhore) and inner-ear therapeutics.",            (RED,)),
-    "DRRX": CompanyInfo("DURECT",                "Larsucosterol for alcohol-associated hepatitis.",                            (RED,)),
     "DRUG": CompanyInfo("Bright Minds Biosciences","5-HT2C agonists for epilepsy and neuropsychiatric disorders.",            (RED,)),
     "ENSC": CompanyInfo("Ensysce Biosciences",   "Abuse- and overdose-resistant opioid prodrug platform.",                     (RED,)),
     "FBIO": CompanyInfo("Fortress Biotech",      "Diversified biopharma holding (CUTX-101, dermatology, oncology).",           (RED,)),
@@ -96,15 +89,13 @@ INFO: dict[str, CompanyInfo] = {
     "GLSI": CompanyInfo("Greenwich LifeSciences","GP2 immunotherapy to prevent HER2/neu+ breast-cancer recurrence.",           (RED,)),
     "GOVX": CompanyInfo("GeoVax Labs",           "Vaccine platform for COVID, mpox, and oncology immunotherapy.",              (RED,)),
     "HOTH": CompanyInfo("Hoth Therapeutics",     "Atopic-dermatitis lotion HT-001 and oncology candidate HT-KIT.",             (RED,)),
-    "IMNN": CompanyInfo("IMUNON",                "TheraPlas DNA-mediated IL-12 immunotherapy (GEN-1) for ovarian cancer.",     (RED,)),
+    "IMNN": CompanyInfo("Imunon",                "TheraPlas DNA-mediated IL-12 immunotherapy (GEN-1) for ovarian cancer.",     (RED,)),
     "INAB": CompanyInfo("IN8bio",                "Allogeneic gamma-delta T-cell therapies for AML and solid tumors.",          (RED,)),
     "KALA": CompanyInfo("KALA BIO",              "KPI-012 mesenchymal stem-cell secretome for persistent corneal defects.",   (RED,)),
     "LXRX": CompanyInfo("Lexicon Pharmaceuticals","Sotagliflozin (Inpefa) for heart failure; SGLT inhibitor pipeline.",        (RED,)),
     "MDXG": CompanyInfo("MiMedx Group",          "Placental-tissue allografts for chronic-wound and surgical recovery.",       (RED,)),
-    "MRNS": CompanyInfo("Marinus Pharmaceuticals","Ganaxolone (ZTALMY) for CDKL5 deficiency and refractory seizures.",         (RED,)),
     "NVCT": CompanyInfo("Nuvectis Pharma",       "NXP800 (HSF1 pathway) for ARID1a-mutated ovarian cancer; NXP900 SRC/YES1.",  (RED,)),
-    "ONCT": CompanyInfo("Oncternal Therapeutics","Zilovertamab (ROR1) ADC and CAR-T for hematologic and solid tumors.",        (RED,)),
-    "PALI": CompanyInfo("Palatin Technologies",  "Melanocortin receptor agonists (Vyleesi; dry-eye PL9643).",                   (RED,)),
+    "PALI": CompanyInfo("Palisade Bio",           "Oral phosphodiesterase-4 inhibitors for GI and inflammatory disease.",        (RED,)),
     "PRTA": CompanyInfo("Prothena",              "Antibodies for misfolded-protein neurodegeneration (prasinezumab, AL01211).",(RED,)),
     "RNAZ": CompanyInfo("TransCode Therapeutics","TTX-MC138 microRNA-10b inhibitor for metastatic cancer.",                    (RED,)),
     "SLDB": CompanyInfo("Solid Biosciences",     "SGT-003 gene therapy for Duchenne muscular dystrophy.",                      (RED,)),
@@ -112,14 +103,12 @@ INFO: dict[str, CompanyInfo] = {
     "TLSA": CompanyInfo("Tiziana Life Sciences", "Intranasal foralumab (anti-CD3) for MS and Alzheimer's neuroinflammation.",  (RED,)),
     "VRPX": CompanyInfo("Virpax Pharmaceuticals","Non-opioid pain candidates including Probudur and Envelta.",                 (RED,)),
     "WINT": CompanyInfo("Windtree Therapeutics", "Istaroxime for cardiogenic shock; rostafuroxin for hypertension.",           (RED,)),
-    "XCUR": CompanyInfo("Exicure",               "SNA-based therapeutics; restructuring around new pipeline assets.",          (RED,)),
     "ENVB": CompanyInfo("Enveric Biosciences",   "Psilocin-derived psychedelic therapeutics for psychiatric disorders.",       (RED,)),
 
     # ---------- Red + Gold (drug development meets AI / computational bio) ----------
     "ABSI": CompanyInfo("Absci",                 "Generative-AI protein design for de novo therapeutic antibodies.",           (RED, GOLD)),
     "BTAI": CompanyInfo("BioXcel Therapeutics",  "AI-driven drug repurposing; Igalmi for acute agitation.",                    (RED, GOLD)),
     "EVAX": CompanyInfo("Evaxion Biotech",       "AI-driven discovery of cancer and infectious-disease vaccines.",             (RED, GOLD)),
-    "IPA":  CompanyInfo("ImmunoPrecise Antibodies","AI-augmented antibody discovery and engineering services.",                (RED, GOLD)),
     "BNGO": CompanyInfo("Bionano Genomics",      "Saphyr optical genome mapping for structural variant analysis.",             (RED, GOLD)),
 
     # ---------- Red + Green (animal + human pharma) ----------
@@ -128,8 +117,6 @@ INFO: dict[str, CompanyInfo] = {
     # ---------- Green: agricultural / animal health ----------
     "ICCC": CompanyInfo("ImmuCell",              "Animal-health products for dairy cattle (First Defense, Mast Out).",         (GREEN,)),
     "BIOX": CompanyInfo("Bioceres Crop Solutions","HB4 drought-tolerant soybean and wheat traits; biological crop inputs.",    (GREEN,)),
-    "AGRI": CompanyInfo("AgriForce Growing Systems","Vertical-farming systems and ag-tech IP for controlled-environment crops.",(GREEN,)),
-    "AGFY": CompanyInfo("Agrify",                "Vertical-farm cultivation hardware and SaaS for cannabis growers.",          (GREEN,)),
     "PETV": CompanyInfo("PetVivo Holdings",      "Spryng injectable osteoarthritis device for dogs and horses.",               (GREEN,)),
 
     # ---------- Green + Blue (aquaculture biotech) ----------
@@ -137,9 +124,7 @@ INFO: dict[str, CompanyInfo] = {
 
     # ---------- White: industrial biotech ----------
     "GEVO": CompanyInfo("Gevo",                  "Low-carbon ethanol and sustainable aviation fuel from agricultural feedstocks.",(WHITE,)),
-    "CDXS": CompanyInfo("Codexis",               "Engineered enzymes for pharma manufacturing and life-science research.",     (WHITE,)),
-    "DNMR": CompanyInfo("Danimer Scientific",    "PHA-based biodegradable bioplastics (Nodax) for packaging.",                 (WHITE,)),
-    "AMRS": CompanyInfo("Amyris",                "Synthetic-biology fermentation platform for ingredients and consumer brands.",(WHITE,)),
+    "CDXS": CompanyInfo("Codexis",               "Engineered-enzyme technology (CodeEvolver) for therapeutics manufacturing.", (RED, WHITE)),
     "ORGN": CompanyInfo("Origin Materials",      "Furanics platform converting biomass into bio-PET and other materials.",     (WHITE,)),
 
     # ---------- Grey: environmental ----------

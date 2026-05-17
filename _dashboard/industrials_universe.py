@@ -53,12 +53,11 @@ INFO: dict[str, CompanyInfo] = {
     "EH":   CompanyInfo("EHang Holdings",          "Autonomous eVTOL passenger and cargo aircraft.",                                  (AEROSPACE_DEFENSE,)),
     "DPRO": CompanyInfo("Draganfly",               "Drones and remote-sensing platforms for public-safety, defense, and ag.",         (AEROSPACE_DEFENSE,)),
     "ONDS": CompanyInfo("Ondas Holdings",          "Private wireless and autonomous drone systems for rail, oil, and defense.",       (AEROSPACE_DEFENSE,)),
-    "POWW": CompanyInfo("AMMO Inc.",               "Ammunition manufacturing and the GunBroker.com online marketplace.",              (AEROSPACE_DEFENSE,)),
+    "POWW": CompanyInfo("Outdoor Holding Company", "Operates GunBroker.com online auction marketplace for firearms and ammunition (post-AMMO ammunition spinoff).", (AEROSPACE_DEFENSE,)),
 
     # -------- Machinery (industrial machinery, 3D printing, automation) --------
     "AEHR": CompanyInfo("Aehr Test Systems",       "Wafer-level burn-in and reliability test systems for semiconductors.",           (MACHINERY,)),
     "DDD":  CompanyInfo("3D Systems",              "Industrial 3D printers and additive-manufacturing materials.",                    (MACHINERY,)),
-    "MKFG": CompanyInfo("Markforged Holding",      "Industrial composite and metal 3D printers for end-use parts.",                   (MACHINERY,)),
     "XMTR": CompanyInfo("Xometry",                 "AI-driven on-demand manufacturing marketplace for CNC, 3D and sheet metal.",      (MACHINERY,)),
     "LIDR": CompanyInfo("AEye",                    "Adaptive solid-state LiDAR for ADAS, autonomous mobility, and industrial.",       (MACHINERY,)),
     "RR":   CompanyInfo("Richtech Robotics",       "Service robots for hospitality, healthcare and food-service automation.",         (MACHINERY,)),
@@ -87,14 +86,12 @@ INFO: dict[str, CompanyInfo] = {
     "EVGO": CompanyInfo("EVgo",                    "Public DC fast-charging network for electric vehicles.",                           (ELECTRICAL_EQUIPMENT,)),
     "POLA": CompanyInfo("Polar Power",             "DC power systems for telecom, marine and military backup applications.",           (ELECTRICAL_EQUIPMENT,)),
     "BLDP": CompanyInfo("Ballard Power Systems",   "PEM fuel cells for heavy-duty mobility and stationary power.",                     (ELECTRICAL_EQUIPMENT,)),
-    "AEY":  CompanyInfo("ADDvantage Technologies", "Repair, refurbishment and distribution of wireless infrastructure gear.",          (ELECTRICAL_EQUIPMENT,)),
-    "SLDP": CompanyInfo("Solid Power",             "Solid-state lithium-metal battery R&D and pilot manufacturing.",                   (ELECTRICAL_EQUIPMENT,)),
+    "SLDP": CompanyInfo("Solid Power",             "Solid-state lithium-metal battery R&D for the EV market.",                         (ELECTRICAL_EQUIPMENT,)),
 
     # -------- Industrial Services (waste, recycling, environmental, pipeline svc) --------
     "SKYQ": CompanyInfo("Sky Quarry",              "Oil-sands tailings recycling and asphalt feedstock recovery.",                     (INDUSTRIAL_SERVICES,)),
     "ESOA": CompanyInfo("Energy Services of America","Pipeline construction and industrial service for energy and utility customers.",(INDUSTRIAL_SERVICES, CONSTRUCTION_ENGINEERING)),
     "LOOP": CompanyInfo("Loop Industries",         "Depolymerization technology that recycles low-value PET into virgin-grade resin.", (INDUSTRIAL_SERVICES,)),
-    "NEPH": CompanyInfo("Nephros",                 "Hollow-fiber ultrafilters for medical and commercial water purification.",         (INDUSTRIAL_SERVICES,)),
 }
 
 
