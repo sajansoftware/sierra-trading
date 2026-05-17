@@ -22,7 +22,7 @@ from data import (
     MAX_PRICE,
     MIN_PRICE,
     Quote,
-    fetch_catalysts,
+    fetch_5y_catalysts,
     filtered_by_category,
     short_blurb,
     tv_num,
@@ -93,22 +93,14 @@ def inject_theme() -> None:
         .main .block-container {{
             padding-top: 1.8rem; padding-bottom: 2rem; max-width: 1280px;
         }}
-        /* All text */
+        /* Default text: white on navy */
         h1, h2, h3, h4, h5, h6, p, span, label, li, code, .stMarkdown {{
             color: {WHITE} !important;
         }}
-        /* Sidebar */
+        /* Sidebar shell */
         section[data-testid="stSidebar"] > div:first-child {{
             background-color: {NAVY_CARD};
             border-right: 1px solid {BORDER};
-        }}
-        section[data-testid="stSidebar"] .stSelectbox > div > div,
-        section[data-testid="stSidebar"] .stTextInput > div > div > input,
-        section[data-testid="stSidebar"] .stNumberInput > div > div > input,
-        section[data-testid="stSidebar"] .stDateInput > div > div > input {{
-            background-color: {NAVY} !important;
-            color: {WHITE} !important;
-            border-color: {BORDER} !important;
         }}
         section[data-testid="stSidebar"] hr {{
             border-color: {BORDER}; margin: 14px 0;
@@ -126,36 +118,93 @@ def inject_theme() -> None:
             border-color: {ACCENT};
             color: {WHITE};
         }}
-        /* Inputs in main area */
-        .stTextInput input, .stNumberInput input, .stDateInput input,
-        .stSelectbox div[data-baseweb="select"] > div, .stTextArea textarea {{
-            background-color: {NAVY_CARD} !important;
-            color: {WHITE} !important;
+        .stButton > button[kind="primary"] {{
+            background-color: {ACCENT};
+            color: #06121e;
+            border-color: {ACCENT};
+        }}
+        /* ============ INPUTS ============
+         * Streamlit's default light theme renders inputs with a white-ish
+         * background. Forcing white text made it invisible. Switch to:
+         *   widget container -> white background
+         *   widget value text -> BLACK (per user request)
+         *   widget OUTSIDE label -> WHITE (left on navy)
+         */
+        .stTextInput > div > div > input,
+        .stNumberInput > div > div > input,
+        .stDateInput > div > div > input,
+        .stTextArea > div > div > textarea,
+        .stSelectbox > div > div,
+        .stSelectbox > div > div * {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
             border-color: {BORDER} !important;
         }}
-        /* Alert / info boxes */
+        /* Dropdown popover (rendered to body via portal) */
+        div[data-baseweb="popover"], div[data-baseweb="popover"] * {{
+            color: #000000 !important;
+        }}
+        div[data-baseweb="popover"] {{
+            background-color: #ffffff !important;
+        }}
+        li[role="option"] {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }}
+        li[role="option"]:hover, li[role="option"][aria-selected="true"] {{
+            background-color: #e2e8f0 !important;
+        }}
+        /* Date picker calendar */
+        div[data-baseweb="calendar"], div[data-baseweb="calendar"] * {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }}
+        /* Radio: keep labels white, dot accent */
+        .stRadio label, .stRadio label * {{ color: {WHITE} !important; }}
+        /* Alerts / info / spinner */
         .stAlert {{
             background-color: {NAVY_CARD} !important;
             color: {WHITE_DIM} !important;
             border: 1px solid {BORDER} !important;
         }}
-        /* Native dataframe */
+        .stAlert * {{ color: {WHITE_DIM} !important; }}
+        .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
+        hr {{ border-color: {BORDER} !important; }}
+        a {{ color: {ACCENT}; }}
+        /* Native dataframe (trade history) */
         [data-testid="stDataFrame"] {{
             background-color: {NAVY_CARD};
             border: 1px solid {BORDER};
             border-radius: 6px;
         }}
-        /* Native dialog */
+        /* Native dialog (catalyst modal) */
         div[role="dialog"] {{
             background-color: {NAVY_CARD} !important;
             color: {WHITE} !important;
             border: 1px solid {BORDER} !important;
         }}
         div[role="dialog"] * {{ color: {WHITE} !important; }}
-        /* Spinner */
-        .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
-        hr {{ border-color: {BORDER} !important; }}
-        a {{ color: {ACCENT}; }}
+        div[role="dialog"] a {{ color: {ACCENT} !important; }}
+        /* IPO and other HTML tables we render via st.markdown */
+        table.sierra-table {{
+            background-color: {NAVY} !important;
+            color: {WHITE};
+            border-collapse: collapse;
+            width: 100%;
+            border: 1px solid {BORDER};
+            border-radius: 6px;
+            overflow: hidden;
+        }}
+        table.sierra-table th, table.sierra-table td {{
+            background-color: {NAVY} !important;
+            color: {WHITE};
+        }}
+        table.sierra-table tbody tr:nth-child(even) td {{
+            background-color: rgba(255,255,255,0.025) !important;
+        }}
+        table.sierra-table tbody tr:hover td {{
+            background-color: {NAVY_HOVER} !important;
+        }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -211,6 +260,7 @@ def _float_bg(v: float) -> str:
 
 
 def style_table(df: pd.DataFrame):
+    """Pandas Styler for use with st.dataframe (cell-level styles only)."""
     if df.empty:
         return df
     s = df.style.format({
@@ -220,92 +270,122 @@ def style_table(df: pd.DataFrame):
     })
     s = s.map(_float_bg, subset=["Float"])
     s = s.map(_price_color, subset=["Close"])
-    s = s.set_properties(subset=["Ticker"], **{
-        "font-weight": "700", "color": WHITE, "text-align": "left",
-    })
-    s = s.set_properties(**{"text-align": "right", "color": WHITE_DIM})
-    s = s.set_properties(subset=["Ticker"], **{"text-align": "left"})
-    s = s.set_properties(subset=["Description"], **{
-        "text-align": "left", "color": WHITE_MUTE,
-        "font-size": "0.85rem", "max-width": "440px",
-        "white-space": "normal", "line-height": "1.4",
-    })
-    s = s.set_table_styles([
-        {"selector": "th",
-         "props": f"background-color:{NAVY_CARD}; color:{WHITE}; "
-                  "font-weight:600; text-align:right; padding:10px 14px; "
-                  f"border-bottom:1px solid {BORDER}; font-size:0.78rem; "
-                  "text-transform:uppercase; letter-spacing:0.5px;"},
-        {"selector": "th.col_heading.level0:nth-child(1), "
-                     "th.col_heading.level0:nth-child(5)",
-         "props": "text-align:left;"},
-        {"selector": "td",
-         "props": f"padding:9px 14px; font-size:0.9rem; "
-                  f"vertical-align:top; border-bottom:1px solid {BORDER};"},
-        {"selector": "tbody tr:nth-child(even)",
-         "props": f"background-color:rgba(255,255,255,0.02);"},
-        {"selector": "tbody tr:hover",
-         "props": f"background-color:{NAVY_HOVER};"},
-        {"selector": "",
-         "props": "border-collapse:collapse; width:100%; "
-                  f"border:1px solid {BORDER}; border-radius:6px; overflow:hidden;"},
-    ])
-    s = s.hide(axis="index")
     return s
 
 
 # =============================================================================
 # Catalyst modal (native dialog — has built-in close X)
 # =============================================================================
+CATALYST_TYPE_COLOR = {
+    "FDA Approval":   "#22c55e",
+    "PDUFA":          "#22c55e",
+    "Clinical Data":  "#06b6d4",
+    "Trial Update":   "#06b6d4",
+    "Product Launch": "#10b981",
+    "Earnings":       "#a78bfa",
+    "Offering":       "#f97316",
+    "M&A":            "#facc15",
+    "Partnership":    "#64b5f6",
+    "Contract Win":   "#34d399",
+    "Listing":        "#64b5f6",
+    "Guidance":       "#a78bfa",
+    "Patent":         "#94a3b8",
+    "Insider":        "#94a3b8",
+    "Analyst":        "#94a3b8",
+    "News":           "#94a3b8",
+    "Big move":       "#475569",
+}
+
+
+def _close_dialog() -> None:
+    st.session_state.selected_ticker = None
+    st.session_state.table_version = st.session_state.get("table_version", 0) + 1
+
+
 @st.dialog("Catalysts", width="large")
 def catalyst_dialog(ticker: str) -> None:
+    with st.spinner("Loading catalysts…"):
+        rows = fetch_5y_catalysts(ticker)
+
     st.markdown(
-        f"<div style='font-size:1.3rem;font-weight:700;color:{WHITE};'>"
-        f"{ticker} — Recent Catalysts</div>",
+        f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};"
+        f"margin-bottom:14px;'>{ticker} — 5-Year Catalysts</div>",
         unsafe_allow_html=True,
     )
-    with st.spinner("Loading news…"):
-        data = fetch_catalysts(ticker)
-    if not data:
-        st.info("No recent news found for this ticker.")
+
+    if not rows:
+        st.info(
+            "No qualifying catalyst days in the last 5 years "
+            "(close $1–$20, RVOL ≥ 5, intraday upside ≥ 10%)."
+        )
         if st.button("Close", key="close_empty"):
-            st.session_state.selected_ticker = None
+            _close_dialog()
             st.rerun()
         return
 
-    for item in data:
-        chg = item.get("change_pct")
-        if chg is not None:
-            color = GOOD if chg >= 0 else DANGER
-            sign = "+" if chg >= 0 else ""
-            badge = f"<span style='color:{color};font-weight:700;'>{sign}{chg:.2f}%</span>"
-        else:
-            badge = f"<span style='color:{WHITE_MUTE};'>--</span>"
-        dt = item.get("datetime")
-        dt_str = dt.strftime("%b %d, %Y %I:%M %p") if dt else ""
-        pub = item.get("publisher") or ""
-        ohlcv = " &nbsp; ".join(
-            f"{k}: ${item[v]:.2f}" if item.get(v) is not None else f"{k}: —"
-            for k, v in [("O","open"),("H","high"),("L","low"),("C","close")]
+    head_cells = "".join(
+        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Date","left"), ("Type","left"), ("Catalyst","left"),
+            ("Source","center"), ("Low","right"), ("High","right"),
+            ("Upside","right"),
+        ]
+    )
+
+    body_rows = []
+    for r in rows:
+        date_str = r["date"].strftime("%b %d, %Y")
+        type_label = r["type"]
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
         )
-        vol = f"Vol: {tv_num(item['volume'])}" if item.get("volume") is not None else "Vol: —"
-        st.markdown(
-            f"""<div style="padding:12px 0;border-bottom:1px solid {BORDER};">
-              <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;">
-                {badge}
-                <span style="color:{WHITE_MUTE};font-size:0.78rem;">{dt_str}</span>
-                {f'<span style="color:{WHITE_MUTE};font-size:0.78rem;">| {pub}</span>' if pub else ''}
-              </div>
-              <a href="{item.get('link','#')}" target="_blank" style="
-                  color:{ACCENT};font-weight:500;text-decoration:none;
-                  display:block;margin-bottom:6px;">{item.get('title','')}</a>
-              <div style="color:{WHITE_MUTE};font-size:0.8rem;">{ohlcv} &nbsp; {vol}</div>
-            </div>""",
-            unsafe_allow_html=True,
+        catalyst_text = (
+            r["title"] if r["title"]
+            else f"<span style='color:#64748b;'>—</span>"
+        )
+        source_html = (
+            f"<a href='{r['link']}' target='_blank' "
+            f"style='color:{ACCENT};text-decoration:none;font-size:0.78rem;'>"
+            f"View ↗</a>"
+            if r["link"]
+            else f"<span style='color:#64748b;font-size:0.78rem;'>—</span>"
+        )
+        up = r["upside_pct"]
+        up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
+        body_rows.append(
+            f"<tr>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};font-weight:500;white-space:nowrap;'>{date_str}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{type_badge}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:360px;'>{catalyst_text}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;'>{source_html}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};text-align:right;'>${r['low']:.2f}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};text-align:right;font-weight:600;'>${r['high']:.2f}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{up_color};text-align:right;font-weight:700;'>+{up:.1f}%</td>"
+            f"</tr>"
         )
 
+    st.markdown(
+        f"""<table class='sierra-table'>
+          <thead><tr>{head_cells}</tr></thead>
+          <tbody>{''.join(body_rows)}</tbody>
+        </table>""",
+        unsafe_allow_html=True,
+    )
+
     if st.button("Close", key="close_dlg"):
-        st.session_state.selected_ticker = None
+        _close_dialog()
         st.rerun()
 
 
@@ -350,26 +430,31 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
         st.info("No tickers in this category currently pass the filter.")
         return
 
-    # Ticker picker for catalyst drill-in
-    tickers = [q.ticker for q in rows]
-    picker_col, btn_col = st.columns([4, 1])
-    with picker_col:
-        sel = st.selectbox(
-            "View catalysts for ticker",
-            options=["—"] + tickers,
-            key=f"picker_{folder}",
-            label_visibility="collapsed",
-        )
-    with btn_col:
-        if st.button("View catalysts", key=f"view_{folder}", use_container_width=True):
-            if sel and sel != "—":
-                st.session_state.selected_ticker = sel
-                st.rerun()
-            else:
-                st.toast("Pick a ticker first.")
-
+    st.caption("Click a row to open the 5-year catalyst archive.")
     df = quotes_to_df(rows, info)
-    st.markdown(style_table(df).to_html(), unsafe_allow_html=True)
+    styled = style_table(df)
+    # Bumped on dialog close so the previous row selection is forgotten
+    table_version = st.session_state.get("table_version", 0)
+    event = st.dataframe(
+        styled,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"sector_table_{folder}_{table_version}",
+        column_config={
+            "Ticker":      st.column_config.TextColumn(width="small"),
+            "Close":       st.column_config.TextColumn(width="small"),
+            "Float":       st.column_config.TextColumn(width="small"),
+            "Mkt Cap":     st.column_config.TextColumn(width="small"),
+            "Description": st.column_config.TextColumn(width="large"),
+        },
+    )
+    if event and event.selection and event.selection.rows:
+        idx = event.selection.rows[0]
+        clicked = df.iloc[idx]["Ticker"]
+        st.session_state.selected_ticker = clicked
+        st.rerun()
 
 
 # =============================================================================
@@ -523,26 +608,41 @@ STATUS_COLOR = {
 }
 
 
+def _format_ipo_date(raw: str | None) -> str:
+    if not raw:
+        return "TBD"
+    try:
+        from datetime import datetime as _dt
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return _dt.strptime(raw, fmt).strftime("%b %d, %Y")
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return raw
+
+
 def _ipo_row(ipo: IPO) -> str:
     status_col = STATUS_COLOR.get(ipo.status, WHITE_MUTE)
     deal = f"${ipo.deal_size/1e6:.1f}M" if ipo.deal_size else "—"
     shares = tv_num(ipo.shares) if ipo.shares else "—"
-    date_str = ipo.expected_date or "—"
+    date_str = _format_ipo_date(ipo.expected_date)
     exch = ipo.exchange or "—"
     return (
         f"<tr>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"font-weight:700;color:{WHITE};'>{ipo.ticker}</td>"
+        f"color:{WHITE};font-weight:700;'>{ipo.ticker}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
         f"color:{WHITE_DIM};'>{ipo.company}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE};text-align:right;'>{ipo.price_display}</td>"
+        f"color:{WHITE};text-align:right;font-weight:600;'>{ipo.price_display}</td>"
+        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
+        f"color:{WHITE};font-weight:500;'>{date_str}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
         f"color:{WHITE_DIM};text-align:right;'>{shares}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
         f"color:{WHITE_DIM};text-align:right;'>{deal}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE_MUTE};'>{date_str}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
         f"color:{WHITE_MUTE};'>{exch}</td>"
         f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};'>"
@@ -574,19 +674,18 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
 
     head_cells = "".join(
         f"<th style='padding:10px 14px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD};color:{WHITE};font-weight:600;"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
         f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
             ("Ticker","left"), ("Company","left"), ("Price","right"),
-            ("Shares","right"), ("Deal Size","right"),
-            ("Expected","left"), ("Exch","left"), ("Status","left"),
+            ("Expected Date","left"), ("Shares","right"), ("Deal Size","right"),
+            ("Exch","left"), ("Status","left"),
         ]
     )
     body = "".join(_ipo_row(r) for r in rows)
     st.markdown(
-        f"""<table style="width:100%;border-collapse:collapse;
-            border:1px solid {BORDER};border-radius:6px;overflow:hidden;">
+        f"""<table class="sierra-table">
           <thead><tr>{head_cells}</tr></thead>
           <tbody>{body}</tbody>
         </table>""",
@@ -595,33 +694,65 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
 
 
 def render_ipo_calendar() -> None:
+    if "ipo_tab" not in st.session_state:
+        st.session_state.ipo_tab = "upcoming"
+
     st.markdown(
         f"""<div style="margin-bottom:8px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
             text-transform:uppercase;letter-spacing:1px;">IPO Calendar</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:4px;">Upcoming IPOs</div>
+          letter-spacing:-0.5px;margin-bottom:6px;">IPO Calendar</div>
         <div style="font-size:0.9rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Proposed price ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
-          Source: NASDAQ IPO calendar &nbsp;·&nbsp; 6h cache</div>""",
+          Proposed price ${MIN_PRICE:.0f}–${MAX_PRICE:.0f}
+          &nbsp;·&nbsp; NASDAQ &nbsp;·&nbsp; 6h cache</div>""",
         unsafe_allow_html=True,
     )
+
+    # Tab buttons
+    tabs = [("upcoming", "Upcoming"), ("priced", "Recently Priced")]
+    cols = st.columns([1, 1, 4])
+    for (key, label), col in zip(tabs, cols[:2]):
+        with col:
+            is_active = st.session_state.ipo_tab == key
+            if st.button(
+                label,
+                key=f"ipo_tab_{key}",
+                use_container_width=True,
+                type="primary" if is_active else "secondary",
+            ):
+                st.session_state.ipo_tab = key
+                st.rerun()
+
+    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
     with st.spinner("Loading IPO calendar…"):
         by_sector = fetch_ipo_calendar(min_price=MIN_PRICE, max_price=MAX_PRICE)
 
-    total = sum(len(rows) for rows in by_sector.values())
+    target_status = "Upcoming" if st.session_state.ipo_tab == "upcoming" else "Priced"
+    filtered: dict[str, list[IPO]] = {
+        sec: [r for r in rows if r.status == target_status]
+        for sec, rows in by_sector.items()
+    }
+    total = sum(len(rows) for rows in filtered.values())
+
     if total == 0:
-        st.info(
-            "No upcoming or recently priced IPOs currently have a "
-            f"proposed price between ${MIN_PRICE:.0f} and ${MAX_PRICE:.0f}. "
-            "Pipeline (TBD-priced filings) is excluded by design."
-        )
+        if target_status == "Upcoming":
+            st.info(
+                "No IPOs with a scheduled price date are currently in the "
+                f"${MIN_PRICE:.0f}–${MAX_PRICE:.0f} range. Check the "
+                "Recently Priced tab for IPOs that completed this month."
+            )
+        else:
+            st.info(
+                f"No IPOs were priced this month in the "
+                f"${MIN_PRICE:.0f}–${MAX_PRICE:.0f} range."
+            )
         return
 
     for sec in ("Biotechnology", "Technology", "Energy", "Other"):
-        _ipo_section(sec, by_sector.get(sec, []))
+        _ipo_section(sec, filtered.get(sec, []))
 
 
 # =============================================================================
@@ -640,6 +771,8 @@ def main() -> None:
         st.session_state.selected_ticker = None
     if "view" not in st.session_state:
         st.session_state.view = "sector"
+    if "table_version" not in st.session_state:
+        st.session_state.table_version = 0
 
     def _reset_view():
         st.session_state.view = "sector"
@@ -699,19 +832,6 @@ def main() -> None:
             st.caption(
                 f"Last load: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
-
-        st.markdown(
-            f"""<div style="margin-top:24px;padding-top:14px;
-              border-top:1px solid {BORDER};">
-              <q style="color:{WHITE_MUTE};font-size:0.78rem;
-                font-style:italic;line-height:1.5;">
-                Be fearful when others are greedy, and greedy when others
-                are fearful.</q>
-              <cite style="color:{WHITE_MUTE};font-size:0.72rem;
-                display:block;margin-top:6px;">— Warren Buffett</cite>
-            </div>""",
-            unsafe_allow_html=True,
-        )
 
     if is_journal:
         render_journal()

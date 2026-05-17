@@ -172,7 +172,6 @@ def fetch_ipo_calendar(
         for status_key, status_label in [
             ("upcoming", "Upcoming"),
             ("priced",   "Priced"),
-            ("filed",    "Filed"),
         ]:
             section = data.get(status_key) or {}
             for r in (section.get("rows") or []):
@@ -195,13 +194,15 @@ def fetch_ipo_calendar(
         seen.add(key)
         unique.append(r)
 
-    # Sort by expected date (rows with dates first), then status, then ticker
+    # Sort: Upcoming first, then Priced; within each, by date asc
+    status_order = {"Upcoming": 0, "Priced": 1}
+
     def _sort_key(r: IPO):
         try:
             d = datetime.fromisoformat(r.expected_date) if r.expected_date else None
         except (TypeError, ValueError):
             d = None
-        return (d is None, d or datetime.max, r.ticker)
+        return (status_order.get(r.status, 9), d is None, d or datetime.max, r.ticker)
 
     unique.sort(key=_sort_key)
 

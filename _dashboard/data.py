@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 import re
 from urllib.parse import urlparse
 
+import pandas as pd
 import requests
 import streamlit as st
 import yfinance as yf
@@ -96,6 +97,123 @@ def _fetch_one(ticker: str) -> Quote:
         )
     except Exception as exc:
         return Quote(ticker, None, None, None, None, None, None, error=str(exc)[:120])
+
+
+CATALYST_KEYWORDS: list[tuple[str, list[str]]] = [
+    ("FDA Approval",      ["fda approval", "fda accept", "fda clearance", "approves", "approved", "510(k)"]),
+    ("PDUFA",             ["pdufa"]),
+    ("Clinical Data",     ["positive data", "topline", "interim data", "primary endpoint", "phase 1", "phase 2", "phase 3", "phase i", "phase ii", "phase iii", "met endpoint"]),
+    ("Trial Update",      ["clinical trial", "enrollment", "first patient", "dosed first", "dosing"]),
+    ("Earnings",          ["earnings", "reports q", "quarterly results", "fiscal year", "revenue beat", "revenue miss"]),
+    ("Product Launch",    ["launches", "launch of", "commercial launch", "now available", "first sale", "commercialization"]),
+    ("Offering",          ["offering", "registered direct", " atm ", "warrant", "dilution", "secondary"]),
+    ("M&A",               ["merger", "acquir", "acquisition", "buyout", "to acquire"]),
+    ("Partnership",       ["partnership", "collaboration", "licensing", "license agreement", "joint venture"]),
+    ("Contract Win",      ["awarded", "contract win", "wins contract", "secures contract"]),
+    ("Listing",           ["ipo", "uplisting", "nasdaq listing", "delisting", "reverse split", "stock split"]),
+    ("Guidance",          ["raises guidance", "lowers guidance", "outlook", "reaffirms guidance"]),
+    ("Patent",            ["patent", "intellectual property"]),
+    ("Insider",           ["insider", "buyback", "share repurchase"]),
+    ("Analyst",           ["upgrade", "downgrade", "initiates coverage", "price target"]),
+]
+
+
+def classify_catalyst(title: str) -> str:
+    """Map a news headline to a catalyst type. Returns 'News' if nothing
+    matches; never returns 'Big move' (a non-sentiment placeholder)."""
+    if not title:
+        return "News"
+    t = title.lower()
+    for label, keywords in CATALYST_KEYWORDS:
+        if any(kw in t for kw in keywords):
+            return label
+    return "News"
+
+
+@st.cache_data(ttl=21_600, show_spinner=False)  # 6 hours
+def fetch_5y_catalysts(
+    ticker: str,
+    min_price: float = 1.0,
+    max_price: float = 20.0,
+    min_rvol: float = 5.0,
+    min_upside_pct: float = 10.0,
+    max_rows: int = 60,
+) -> list[dict]:
+    """Detect catalyst days in the last 5 years of trading.
+
+    A row qualifies as a catalyst when ALL of the following hold:
+      - split-adjusted close was between `min_price` and `max_price`
+      - intraday upside (High vs prior Close) >= `min_upside_pct`
+      - relative volume (day's volume / 50d average) >= `min_rvol`
+
+    Float-under-20M is enforced upstream (only universe-eligible
+    tickers reach this code), so we don't re-check it here.
+
+    Prices are split-adjusted (auto_adjust=True) so the $1-$20 filter
+    holds across reverse splits.
+
+    Returns list of dicts sorted most-recent first:
+        date, type, title, link, low, high, close, volume, rvol, upside_pct
+    """
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.history(period="5y", auto_adjust=True)
+    except Exception:
+        return []
+    if hist is None or hist.empty or "High" not in hist or "Close" not in hist:
+        return []
+
+    prev_close = hist["Close"].shift(1)
+    upside_pct = (hist["High"] - prev_close) / prev_close * 100.0
+    avg_vol = hist["Volume"].rolling(50, min_periods=20).mean()
+    rvol = hist["Volume"] / avg_vol
+
+    mask = (
+        (hist["Close"] >= min_price)
+        & (hist["Close"] <= max_price)
+        & (upside_pct >= min_upside_pct)
+        & (rvol >= min_rvol)
+    )
+
+    # Collect news by date for enrichment (yfinance only carries recent items)
+    news_by_date: dict[date, list[dict]] = {}
+    try:
+        for article in (t.news or []):
+            ts = article.get("providerPublishTime")
+            if not ts:
+                continue
+            d = datetime.fromtimestamp(ts).date()
+            news_by_date.setdefault(d, []).append(article)
+    except Exception:
+        news_by_date = {}
+
+    rows: list[dict] = []
+    for ts in hist.index[mask]:
+        d = ts.date() if hasattr(ts, "date") else ts
+        bar = hist.loc[ts]
+        matched = news_by_date.get(d, [])
+        title = ""
+        link = ""
+        if matched:
+            best = matched[0]
+            title = best.get("title", "") or ""
+            link = best.get("link", "") or ""
+        rows.append({
+            "date":       d,
+            "type":       classify_catalyst(title),
+            "title":      title,
+            "link":       link,
+            "low":        float(bar["Low"]),
+            "high":       float(bar["High"]),
+            "close":      float(bar["Close"]),
+            "volume":     int(bar["Volume"]) if not pd.isna(bar.get("Volume", 0)) else None,
+            "rvol":       float(rvol.loc[ts]) if not pd.isna(rvol.loc[ts]) else None,
+            "upside_pct": float(upside_pct.loc[ts]),
+        })
+
+    # Most recent first
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows[:max_rows]
 
 
 def short_blurb(summary: str | None) -> str:
