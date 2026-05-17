@@ -51,13 +51,13 @@ DANGER      = "#ef4444"
 
 SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
     "Biotechnology": {
-        "Red_Medical_Pharmaceutical": ("Red — Medical / Pharmaceutical", ACCENT, ROOT / "Biotechnology" / "Red_Medical_Pharmaceutical"),
-        "Green_Agricultural":         ("Green — Agricultural",           ACCENT, ROOT / "Biotechnology" / "Green_Agricultural"),
-        "White_Industrial":           ("White — Industrial",             ACCENT, ROOT / "Biotechnology" / "White_Industrial"),
-        "Blue_Marine":                ("Blue — Marine",                  ACCENT, ROOT / "Biotechnology" / "Blue_Marine"),
-        "Grey_Environmental":         ("Grey — Environmental",           ACCENT, ROOT / "Biotechnology" / "Grey_Environmental"),
-        "Yellow_Food_Nutrition":      ("Yellow — Food / Nutrition",      ACCENT, ROOT / "Biotechnology" / "Yellow_Food_Nutrition"),
-        "Gold_Bioinformatics":        ("Gold — Bioinformatics",          ACCENT, ROOT / "Biotechnology" / "Gold_Bioinformatics"),
+        "Red_Medical_Pharmaceutical": ("Medical / Pharmaceutical", ACCENT, ROOT / "Biotechnology" / "Red_Medical_Pharmaceutical"),
+        "Green_Agricultural":         ("Agricultural",             ACCENT, ROOT / "Biotechnology" / "Green_Agricultural"),
+        "White_Industrial":           ("Industrial",               ACCENT, ROOT / "Biotechnology" / "White_Industrial"),
+        "Blue_Marine":                ("Marine",                   ACCENT, ROOT / "Biotechnology" / "Blue_Marine"),
+        "Grey_Environmental":         ("Environmental",            ACCENT, ROOT / "Biotechnology" / "Grey_Environmental"),
+        "Yellow_Food_Nutrition":      ("Food / Nutrition",         ACCENT, ROOT / "Biotechnology" / "Yellow_Food_Nutrition"),
+        "Gold_Bioinformatics":        ("Bioinformatics",           ACCENT, ROOT / "Biotechnology" / "Gold_Bioinformatics"),
     },
     "Technology": {
         "Semiconductors":      ("Semiconductors",        ACCENT, ROOT / "Technology" / "Semiconductors"),
