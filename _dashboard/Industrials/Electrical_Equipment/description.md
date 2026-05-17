@@ -1,0 +1,1 @@
+Electrical equipment — EV charging networks, fuel cells, DC backup power, solid-state batteries, and ammunition. EV-charging names are sensitive to subsidy programs and utility partnerships; battery R&D names move on milestone announcements.

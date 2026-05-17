@@ -1,0 +1,1 @@
+Transportation & logistics — dry-bulk and tanker shipping, LNG carriers, trucking, and intermodal logistics. Low-float Greek shipping names trade heavily on Baltic indices, tanker rates, and dividend declarations.

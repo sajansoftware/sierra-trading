@@ -30,6 +30,7 @@ from data import (
 import universe as bio_universe
 import tech_universe
 import energy_universe
+import industrials_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 
@@ -75,6 +76,14 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Midstream":                   ("Midstream",                     ACCENT, ROOT / "Energy" / "Midstream"),
         "Renewable_Energy":            ("Renewable Energy",              ACCENT, ROOT / "Energy" / "Renewable_Energy"),
         "Coal_Uranium":                ("Coal & Uranium",                ACCENT, ROOT / "Energy" / "Coal_Uranium"),
+    },
+    "Industrials": {
+        "Aerospace_Defense":        ("Aerospace & Defense",        ACCENT, ROOT / "Industrials" / "Aerospace_Defense"),
+        "Machinery":                ("Machinery",                  ACCENT, ROOT / "Industrials" / "Machinery"),
+        "Transportation_Logistics": ("Transportation & Logistics", ACCENT, ROOT / "Industrials" / "Transportation_Logistics"),
+        "Construction_Engineering": ("Construction & Engineering", ACCENT, ROOT / "Industrials" / "Construction_Engineering"),
+        "Electrical_Equipment":     ("Electrical Equipment",       ACCENT, ROOT / "Industrials" / "Electrical_Equipment"),
+        "Industrial_Services":      ("Industrial Services",        ACCENT, ROOT / "Industrials" / "Industrial_Services"),
     },
 }
 
@@ -867,6 +876,7 @@ def main() -> None:
         "Biotechnology": bio_universe,
         "Technology":    tech_universe,
         "Energy":        energy_universe,
+        "Industrials":   industrials_universe,
     }[main_cat]
 
     ticker_count = f"{len(uni_mod.INFO)} curated"

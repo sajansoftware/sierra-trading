@@ -1,0 +1,1 @@
+Construction & engineering — heavy civil, building MEP services, pipe and pre-cast products, energy-efficiency consulting, and infrastructure construction. Drivers include federal infrastructure spending, utility cap-ex cycles, and backlog updates.

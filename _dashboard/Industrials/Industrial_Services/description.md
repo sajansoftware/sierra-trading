@@ -1,0 +1,1 @@
+Industrial services — waste recycling, pipeline construction, environmental remediation, and water filtration. Several names overlap with Biotechnology / Grey (Environmental); they appear in both views by design.

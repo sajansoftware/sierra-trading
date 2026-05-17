@@ -1,0 +1,1 @@
+Aerospace & defense — satellite operators, space-infrastructure builders, eVTOL and drone makers, defense electronics, and law-enforcement tech. Small-cap names here are often news-driven on contract awards, launch milestones, and military adoption.

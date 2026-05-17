@@ -1,0 +1,1 @@
+Industrial machinery and automation — semiconductor test equipment, industrial 3D printing, LiDAR for ADAS, drones, and service robotics. Catalysts cluster around product launches, capacity expansions, and large-customer wins.
