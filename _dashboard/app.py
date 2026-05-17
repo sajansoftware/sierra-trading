@@ -347,7 +347,10 @@ CATALYST_TYPE_COLOR = {
 
 
 def _close_dialog() -> None:
-    st.session_state.selected_ticker = None
+    """Called by the in-dialog Close button. Streamlit reruns afterwards;
+    selected_ticker has already been consumed in main(), so the dialog
+    won't re-open."""
+    pass
 
 
 @st.dialog("Catalysts", width="large")
@@ -900,9 +903,13 @@ def main() -> None:
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
 
-    # Open catalyst dialog if a ticker is selected
-    if st.session_state.selected_ticker:
-        catalyst_dialog(st.session_state.selected_ticker)
+    # Single-shot dialog open: consume selected_ticker BEFORE calling the
+    # dialog. Any subsequent rerun (sub-sector click, X close, etc.) will
+    # see None and skip the call, so the dialog dismisses naturally.
+    pending = st.session_state.selected_ticker
+    if pending:
+        st.session_state.selected_ticker = None
+        catalyst_dialog(pending)
 
 
 if __name__ == "__main__":
