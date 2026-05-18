@@ -1038,53 +1038,54 @@ def render_mia_coach() -> None:
         unsafe_allow_html=True,
     )
 
-    # Trade source: Tradervue if configured, else local Trading Journal.
-    tv_configured = tradervue.is_configured()
-    sources = []
-    if tv_configured:
-        sources.append("Tradervue (live)")
-    sources.append("Local Trading Journal")
-    if tv_configured:
-        chosen = st.radio(
-            "Source",
-            options=sources,
-            horizontal=True,
-            key="mia_source",
-            label_visibility="collapsed",
-        )
-    else:
-        chosen = "Local Trading Journal"
-        st.caption(
-            "💡 Want to analyze your real trades? Configure Tradervue in "
-            "Streamlit secrets — see [tradervue.py docstring] for the keys."
-        )
-
-    if chosen.startswith("Tradervue"):
-        with st.spinner("Fetching trades from Tradervue…"):
-            trades, err = tradervue.fetch_tradervue_trades()
-        if err:
-            st.error(f"Tradervue: {err}. Falling back to local journal.")
-            trades = trading_journal.load_trades()
+    # ---- Trade source: Tradervue CSV upload OR local Trading Journal ----
+    uploaded = st.file_uploader(
+        "Upload your Tradervue CSV export (Account → Export → CSV)",
+        type=["csv"], key="mia_tv_upload",
+    )
+    if uploaded is not None:
+        try:
+            parsed = tradervue.parse_tradervue_csv(uploaded.getvalue())
+        except Exception as exc:
+            st.error(f"Could not parse CSV: {exc}")
+            parsed = []
+        if parsed:
+            st.session_state["mia_tv_trades"] = parsed
+            st.success(f"Loaded {len(parsed)} trades from Tradervue CSV.")
         else:
-            st.caption(
-                f"Loaded {len(trades)} trades from Tradervue (15-min cache; "
-                "use sidebar Refresh quotes to bust)."
-            )
+            st.warning("CSV parsed but no usable rows found. "
+                       "Check column headers in the export.")
+
+    tv_trades = st.session_state.get("mia_tv_trades") or []
+    local_trades = trading_journal.load_trades()
+
+    if tv_trades and local_trades:
+        src = st.radio(
+            "Source",
+            options=[f"Tradervue CSV ({len(tv_trades)} trades)",
+                     f"Local Journal ({len(local_trades)} trades)"],
+            horizontal=True, key="mia_source", label_visibility="collapsed",
+        )
+        trades = tv_trades if src.startswith("Tradervue") else local_trades
+    elif tv_trades:
+        trades = tv_trades
+        st.caption(f"Analyzing {len(tv_trades)} Tradervue trades from the uploaded CSV.")
     else:
-        trades = trading_journal.load_trades()
+        trades = local_trades
+
+    if tv_trades and st.button("Clear uploaded CSV", key="mia_tv_clear"):
+        st.session_state.pop("mia_tv_trades", None)
+        st.rerun()
 
     analysis = mia_module.analyze(trades)
 
     if analysis.get("empty"):
-        if chosen.startswith("Tradervue"):
-            st.info("Tradervue returned no trades. Check your account has "
-                    "trades imported and the credentials are correct.")
-        else:
-            st.info(
-                "No trades logged yet. Add some entries in the Trading Journal "
-                "and come back - Mia needs at least a handful of trades to spot "
-                "patterns (8-10 trades minimum is recommended)."
-            )
+        st.info(
+            "No trades to analyze yet. Either upload a Tradervue CSV "
+            "(Account → Export → CSV) using the box above, or log "
+            "trades in the Trading Journal sidebar option. Mia needs "
+            "at least 8-10 trades to spot meaningful patterns."
+        )
         return
 
     # ---- Top metrics ----
