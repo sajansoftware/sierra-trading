@@ -46,7 +46,6 @@ import real_estate_universe
 import healthcare_svc_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
-from verifier import verify_categorization, SourceCheck
 
 ROOT = Path(__file__).parent
 
@@ -442,100 +441,6 @@ def _close_dialog() -> None:
     pass
 
 
-_SECTOR_LOOKUP_MODS = [
-    ("Biotechnology",          bio_universe),
-    ("Technology",             tech_universe),
-    ("Energy",                  energy_universe),
-    ("Industrials",            industrials_universe),
-    ("Materials",              materials_universe),
-    ("Consumer_Discretionary", consumer_disc_universe),
-    ("Financials",             financials_universe),
-    ("Communication_Services", comm_services_universe),
-    ("Consumer_Staples",       consumer_staples_universe),
-    ("Real_Estate",            real_estate_universe),
-    ("Healthcare_Services",    healthcare_svc_universe),
-]
-
-
-def _find_ticker_sector(ticker: str) -> str | None:
-    """Return the dashboard sector key the ticker is assigned to."""
-    for sector_key, mod in _SECTOR_LOOKUP_MODS:
-        try:
-            if ticker in mod.all_tickers():
-                return sector_key
-        except Exception:
-            continue
-    return None
-
-
-_CONFIDENCE_COLOR = {
-    "high": GOOD,
-    "low":  WARN,
-    "none": DANGER,
-}
-
-
-def _render_verification_section(ticker: str) -> None:
-    """3-source category verification block inside the catalyst dialog."""
-    sector = _find_ticker_sector(ticker)
-    if not sector:
-        return
-    sector_display = sector.replace("_", " ")
-    with st.spinner("Cross-checking category against 3 sources…"):
-        try:
-            checks, confidence = verify_categorization(ticker, sector)
-        except Exception:
-            return
-    col = _CONFIDENCE_COLOR.get(confidence, WHITE_MUTE)
-    UNAVAILABLE = ("(no data)", "(no website)")
-    n_avail = sum(1 for c in checks if c.sector_label not in UNAVAILABLE)
-    n_match = sum(1 for c in checks if c.matches)
-    st.markdown(
-        f"""<div style='margin-top:18px;padding:14px 16px;
-            background:rgba(255,255,255,0.03);
-            border:1px solid {BORDER};border-radius:6px;'>
-          <div style='display:flex;justify-content:space-between;
-            align-items:center;margin-bottom:10px;'>
-            <span style='font-size:0.95rem;font-weight:600;color:{WHITE};'>
-              Category Verification — assigned to {sector_display}
-            </span>
-            <span style='background:{col};color:#06121e;font-weight:700;
-              font-size:0.72rem;padding:3px 10px;border-radius:4px;'>
-              {n_match}/{n_avail} available sources agree &nbsp;·&nbsp; {confidence.upper()}
-            </span>
-          </div>""",
-        unsafe_allow_html=True,
-    )
-    for c in checks:
-        mark = "✓" if c.matches else "✗"
-        mark_col = GOOD if c.matches else DANGER
-        snippet = c.snippet or "(no description available)"
-        link_html = (
-            f"<a href='{c.link}' target='_blank' style='color:{ACCENT};"
-            f"text-decoration:none;font-size:0.78rem;'>view ↗</a>"
-            if c.link else ""
-        )
-        st.markdown(
-            f"""<div style='padding:9px 0;border-top:1px solid {BORDER};
-                display:flex;gap:14px;align-items:flex-start;'>
-              <span style='color:{mark_col};font-weight:700;
-                font-size:1rem;width:14px;'>{mark}</span>
-              <div style='flex:1;'>
-                <div style='display:flex;justify-content:space-between;
-                  align-items:baseline;margin-bottom:3px;'>
-                  <span style='color:{WHITE};font-weight:600;
-                    font-size:0.85rem;'>{c.source}</span>
-                  <span style='color:{WHITE_MUTE};font-size:0.78rem;'>
-                    {c.sector_label} &nbsp;·&nbsp; {link_html}
-                  </span>
-                </div>
-                <div style='color:{WHITE_DIM};font-size:0.82rem;
-                  line-height:1.4;'>{snippet}</div>
-              </div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 @st.dialog("Catalysts", width="large")
@@ -635,11 +540,6 @@ def catalyst_dialog(ticker: str) -> None:
         </table>""",
         unsafe_allow_html=True,
     )
-
-    # 3-source category verification - LAZY. Shows only when the user
-    # opts in, so the dialog itself opens instantly.
-    if st.toggle("Show 3-source category verification", key="show_verify"):
-        _render_verification_section(ticker)
 
     if st.button("Close", key="close_dlg"):
         _close_dialog()
