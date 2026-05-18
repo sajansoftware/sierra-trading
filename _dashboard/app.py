@@ -430,6 +430,7 @@ CATALYST_TYPE_COLOR = {
     "IND Clearance":    "#22c55e",
     "NDA / BLA":        "#10b981",
     "Designation":      "#10b981",
+    "FDA Meeting":      "#06b6d4",
     "Product Launch":   "#10b981",
     "Contract Win":     "#34d399",
     "Buyout / Rumor":   "#facc15",
