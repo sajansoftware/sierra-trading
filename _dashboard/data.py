@@ -130,6 +130,176 @@ def classify_catalyst(title: str) -> str:
     return "News"
 
 
+@st.cache_data(ttl=3_600, show_spinner=False)  # 1 hour (intraday-sensitive)
+def fetch_premarket_catalysts(
+    ticker: str,
+    min_price: float = 1.0,
+    max_price: float = 20.0,
+    min_upside_pct: float = 30.0,
+    lookback_days: int = 60,
+    max_rows: int = 60,
+) -> list[dict]:
+    """Detect pre-market (4:00am-9:29am ET) catalyst days.
+
+    yfinance limit: 5-minute bars are only available for the last 60
+    days. So this is a 60-day archive, not 5 years.
+
+    A row qualifies when:
+      - close (split-adjusted) on the day was between min_price and max_price
+      - pre-market upside (PM high vs prior regular-session close)
+        >= min_upside_pct
+
+    Returns rows sorted most-recent first with:
+        date, pm_low, pm_low_time, pm_high, pm_high_time, prior_close,
+        upside_pct, type, title, link, source
+    """
+    try:
+        t = yf.Ticker(ticker)
+        intraday = t.history(
+            period=f"{lookback_days}d",
+            interval="5m",
+            prepost=True,
+            auto_adjust=True,
+        )
+        daily = t.history(period=f"{lookback_days + 5}d", interval="1d", auto_adjust=True)
+    except Exception:
+        return []
+    if intraday is None or intraday.empty or daily is None or daily.empty:
+        return []
+
+    # Convert intraday to Eastern Time so 4:00-9:29 is the right window.
+    try:
+        intraday.index = intraday.index.tz_convert("America/New_York")
+    except Exception:
+        try:
+            intraday.index = intraday.index.tz_localize("UTC").tz_convert("America/New_York")
+        except Exception:
+            return []
+
+    # Daily prior-close lookup: map date -> close.
+    daily_close_by_date: dict[date, float] = {}
+    for ts, row in daily.iterrows():
+        try:
+            d = ts.date()
+            daily_close_by_date[d] = float(row["Close"])
+        except (KeyError, ValueError):
+            continue
+    sorted_daily_dates = sorted(daily_close_by_date.keys())
+
+    def prior_close(d: date) -> float | None:
+        # Find last daily date strictly before d
+        prev = None
+        for dd in sorted_daily_dates:
+            if dd < d:
+                prev = dd
+            else:
+                break
+        return daily_close_by_date.get(prev) if prev else None
+
+    # Filter to pre-market window (4:00am-9:29am ET) and group by date.
+    pm = intraday.between_time("04:00", "09:29")
+    if pm.empty:
+        return []
+
+    # Recent yfinance news (~30d) for headline matching
+    news_by_date: dict[date, list[dict]] = {}
+    try:
+        for article in (t.news or []):
+            ts_ = article.get("providerPublishTime")
+            if not ts_:
+                continue
+            d_ = datetime.fromtimestamp(ts_).date()
+            news_by_date.setdefault(d_, []).append({
+                "date":   d_,
+                "title":  article.get("title", "") or "",
+                "link":   article.get("link", "") or "",
+                "source": "Yahoo (yfinance)",
+            })
+    except Exception:
+        pass
+
+    # Multi-source news index
+    try:
+        from news_sources import combined_news_by_date
+        for d_, items in combined_news_by_date(ticker).items():
+            news_by_date.setdefault(d_, []).extend(items)
+    except Exception:
+        pass
+
+    # SEC EDGAR
+    try:
+        from edgar import fetch_8k_filings, filings_by_date
+        filings_idx = filings_by_date(fetch_8k_filings(ticker, years_back=1))
+    except Exception:
+        filings_idx = {}
+
+    rows: list[dict] = []
+    for d, day_bars in pm.groupby(pm.index.date):
+        if day_bars.empty:
+            continue
+        pm_high = float(day_bars["High"].max())
+        pm_low = float(day_bars["Low"].min())
+        try:
+            pm_high_ts = day_bars["High"].idxmax()
+            pm_low_ts = day_bars["Low"].idxmin()
+        except Exception:
+            continue
+        pc = prior_close(d)
+        if pc is None or pc <= 0:
+            continue
+        upside_pct = (pm_high - pc) / pc * 100.0
+        if upside_pct < min_upside_pct:
+            continue
+        # Apply $1-$20 filter using the day's regular-session close
+        day_close = daily_close_by_date.get(d, pm_high)
+        if not (min_price <= day_close <= max_price):
+            continue
+
+        # Headline enrichment (same day or 1 day before, since pre-market
+        # events often follow overnight news)
+        title = link = source = ctype = ""
+        for offset in (0, -1, 1, -2, 2):
+            for item in news_by_date.get(d + timedelta(days=offset), []):
+                title = item["title"]
+                link = item["link"]
+                source = item["source"]
+                ctype = classify_catalyst(title)
+                break
+            if title:
+                break
+        if not title:
+            for offset in range(-3, 6):
+                fls = filings_idx.get(d + timedelta(days=offset), [])
+                if fls:
+                    f = fls[0]
+                    title = f["description"]
+                    link = f["link"]
+                    source = "SEC EDGAR"
+                    ctype = f["type"]
+                    break
+        if not ctype:
+            ctype = "News"
+        if not source:
+            source = "—"
+
+        rows.append({
+            "date":         d,
+            "pm_low":       pm_low,
+            "pm_low_time":  pm_low_ts.strftime("%I:%M %p ET").lstrip("0"),
+            "pm_high":      pm_high,
+            "pm_high_time": pm_high_ts.strftime("%I:%M %p ET").lstrip("0"),
+            "prior_close":  pc,
+            "upside_pct":   upside_pct,
+            "type":         ctype,
+            "title":        title,
+            "link":         link,
+            "source":       source,
+        })
+
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows[:max_rows]
+
+
 @st.cache_data(ttl=21_600, show_spinner=False)  # 6 hours
 def fetch_5y_catalysts(
     ticker: str,

@@ -11,8 +11,13 @@ Architecture:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
 
 import pandas as pd
 import streamlit as st
@@ -22,7 +27,7 @@ from data import (
     MAX_PRICE,
     MIN_PRICE,
     Quote,
-    fetch_5y_catalysts,
+    fetch_premarket_catalysts,
     filtered_by_category,
     short_blurb,
     tv_num,
@@ -355,19 +360,22 @@ def _close_dialog() -> None:
 
 @st.dialog("Catalysts", width="large")
 def catalyst_dialog(ticker: str) -> None:
-    with st.spinner("Loading catalysts…"):
-        rows = fetch_5y_catalysts(ticker)
+    with st.spinner("Loading pre-market catalysts…"):
+        rows = fetch_premarket_catalysts(ticker)
 
     st.markdown(
-        f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};"
-        f"margin-bottom:14px;'>{ticker} — 5-Year Catalysts</div>",
+        f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};'>"
+        f"{ticker} — Pre-Market Catalysts</div>"
+        f"<div style='color:{WHITE_MUTE};font-size:0.78rem;margin-bottom:14px;'>"
+        f"Pre-market window 4:00 AM – 9:29 AM ET &nbsp;·&nbsp; "
+        f"last 60 days (yfinance intraday limit)</div>",
         unsafe_allow_html=True,
     )
 
     if not rows:
         st.info(
-            "No qualifying catalyst days in the last 5 years "
-            "(close $1–$20, RVOL ≥ 5, intraday upside ≥ 10%)."
+            "No qualifying pre-market catalyst days in the last 60 days "
+            "(close $1–$20, PM upside ≥ 30%)."
         )
         if st.button("Close", key="close_empty"):
             _close_dialog()
@@ -380,9 +388,9 @@ def catalyst_dialog(ticker: str) -> None:
         f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Date","left"), ("Type","left"), ("Catalyst","left"),
-            ("Source","center"), ("Low","right"), ("High","right"),
-            ("Upside","right"),
+            ("Date","left"), ("PM Low","right"), ("PM High","right"),
+            ("Upside","right"), ("Type","left"),
+            ("Catalyst","left"), ("Source","center"),
         ]
     )
 
@@ -414,21 +422,29 @@ def catalyst_dialog(ticker: str) -> None:
             )
         up = r["upside_pct"]
         up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
+        pm_low_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['pm_low']:.2f}</div>"
+            f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_low_time']}</div>"
+        )
+        pm_high_cell = (
+            f"<div style='color:{WHITE};font-weight:600;'>${r['pm_high']:.2f}</div>"
+            f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_high_time']}</div>"
+        )
         body_rows.append(
             f"<tr>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};font-weight:500;white-space:nowrap;'>{date_str}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{type_badge}</td>"
+            f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>{date_str}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:360px;'>{catalyst_text}</td>"
+            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;'>{source_html}</td>"
+            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};text-align:right;'>${r['low']:.2f}</td>"
+            f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>+{up:.1f}%</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};text-align:right;font-weight:600;'>${r['high']:.2f}</td>"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>{catalyst_text}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{up_color};text-align:right;font-weight:700;'>+{up:.1f}%</td>"
+            f"text-align:center;vertical-align:top;'>{source_html}</td>"
             f"</tr>"
         )
 
@@ -805,6 +821,18 @@ def main() -> None:
         st.session_state.selected_ticker = None
     if "view" not in st.session_state:
         st.session_state.view = "sector"
+
+    # Daily auto-refresh: clear all TTL caches on the first script run of
+    # each ET trading day so a left-open browser tab pulls fresh data
+    # automatically (no manual refresh needed).
+    try:
+        et = ZoneInfo("America/New_York") if ZoneInfo else timezone(timedelta(hours=-5))
+        today_et = datetime.now(et).date()
+    except Exception:
+        today_et = datetime.utcnow().date()
+    if st.session_state.get("last_data_date") != today_et:
+        st.cache_data.clear()
+        st.session_state.last_data_date = today_et
 
     # Ticker click -> ?ticker=XXX. Capture, set session state, then clear
     # the URL so refreshing or closing the dialog doesn't re-open it.
