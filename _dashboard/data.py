@@ -837,13 +837,12 @@ def _filtered_by_category_impl(
 
     fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
 
-    # Read NASDAQ company descriptions from disk cache (no live HTTP).
-    # Disk cache fills lazily via the catalyst dialog / per-ticker paths
-    # and is shipped with the repo so deploys carry coverage.
+    # First pass: enrich with whatever's already cached on disk.
     try:
-        from verifier import fetch_nasdaq_desc_cached_only
+        from verifier import fetch_nasdaq_desc_cached_only, fetch_nasdaq_desc
     except Exception:
         fetch_nasdaq_desc_cached_only = lambda t: ""
+        fetch_nasdaq_desc = lambda t: ""
 
     enriched_pass: dict[str, Quote] = {}
     for t, seed in seeds.items():
@@ -851,6 +850,21 @@ def _filtered_by_category_impl(
         eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), desc)
         if eq.passes_full_criteria():
             enriched_pass[t] = eq
+
+    # Second pass: for surviving tickers that don't have a description
+    # yet, fetch live from NASDAQ in parallel. Each successful fetch
+    # writes to the 30-day disk cache so subsequent loads are instant.
+    missing = [t for t, q in enriched_pass.items() if not q.summary]
+    if missing:
+        def _one(t):
+            try:
+                return t, fetch_nasdaq_desc(t)
+            except Exception:
+                return t, ""
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for t, d in pool.map(_one, missing):
+                if d:
+                    enriched_pass[t] = dc_replace(enriched_pass[t], summary=d)
 
     result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():

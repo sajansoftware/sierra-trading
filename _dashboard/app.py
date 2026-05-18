@@ -329,11 +329,14 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
     for q in rows:
         meta = info.get(q.ticker)
         if meta is not None:
+            # Curated INFO: real company name + curated blurb
             company = f"{meta.name} — {meta.blurb}"
+        elif q.summary:
+            # Real NASDAQ description (cached or fresh)
+            company = short_blurb(q.summary) or q.summary
         else:
-            name = (q.name or q.ticker).strip()
-            blurb = short_blurb(q.summary) or (q.industry or "")
-            company = f"{name} — {blurb}" if blurb else name
+            # No real company-specific description available; blank.
+            company = ""
         # Same-window link: only this cell is clickable, so clicking
         # anywhere else in the row does nothing.
         ticker_link = (
