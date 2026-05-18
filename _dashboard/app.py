@@ -48,6 +48,7 @@ import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 from aidan import audit_rows, QASuggestion
 import mia as mia_module
+import tradervue
 
 ROOT = Path(__file__).parent
 
@@ -1037,15 +1038,53 @@ def render_mia_coach() -> None:
         unsafe_allow_html=True,
     )
 
-    trades = trading_journal.load_trades()
+    # Trade source: Tradervue if configured, else local Trading Journal.
+    tv_configured = tradervue.is_configured()
+    sources = []
+    if tv_configured:
+        sources.append("Tradervue (live)")
+    sources.append("Local Trading Journal")
+    if tv_configured:
+        chosen = st.radio(
+            "Source",
+            options=sources,
+            horizontal=True,
+            key="mia_source",
+            label_visibility="collapsed",
+        )
+    else:
+        chosen = "Local Trading Journal"
+        st.caption(
+            "💡 Want to analyze your real trades? Configure Tradervue in "
+            "Streamlit secrets — see [tradervue.py docstring] for the keys."
+        )
+
+    if chosen.startswith("Tradervue"):
+        with st.spinner("Fetching trades from Tradervue…"):
+            trades, err = tradervue.fetch_tradervue_trades()
+        if err:
+            st.error(f"Tradervue: {err}. Falling back to local journal.")
+            trades = trading_journal.load_trades()
+        else:
+            st.caption(
+                f"Loaded {len(trades)} trades from Tradervue (15-min cache; "
+                "use sidebar Refresh quotes to bust)."
+            )
+    else:
+        trades = trading_journal.load_trades()
+
     analysis = mia_module.analyze(trades)
 
     if analysis.get("empty"):
-        st.info(
-            "No trades logged yet. Add some entries in the Trading Journal "
-            "and come back - Mia needs at least a handful of trades to spot "
-            "patterns (8-10 trades minimum is recommended)."
-        )
+        if chosen.startswith("Tradervue"):
+            st.info("Tradervue returned no trades. Check your account has "
+                    "trades imported and the credentials are correct.")
+        else:
+            st.info(
+                "No trades logged yet. Add some entries in the Trading Journal "
+                "and come back - Mia needs at least a handful of trades to spot "
+                "patterns (8-10 trades minimum is recommended)."
+            )
         return
 
     # ---- Top metrics ----
