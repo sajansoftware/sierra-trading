@@ -327,24 +327,57 @@ _CRYPTO_KEYWORDS = re.compile(
 )
 
 
+ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
+    "Health Care":            SECTOR_HCSVC,        # non-biotech HC default
+    "Technology":             SECTOR_TECH,
+    "Energy":                 SECTOR_ENERGY,
+    "Industrials":            SECTOR_INDUSTRIAL,
+    "Finance":                SECTOR_FINANCIALS,
+    "Consumer Discretionary": SECTOR_CONSUMER_D,
+    "Consumer Staples":       SECTOR_STAPLES,
+    "Telecommunications":     SECTOR_COMMUNICATION,
+    "Real Estate":            SECTOR_REALESTATE,
+    "Basic Materials":        SECTOR_MATERIALS,
+    "Miscellaneous":          SECTOR_INDUSTRIAL,   # most "misc" small-caps are industrial-ish
+    "Communication Services": SECTOR_COMMUNICATION,
+    "Communications":         SECTOR_COMMUNICATION,
+    "Public Utilities":       SECTOR_INDUSTRIAL,   # we don't have a Utilities sector yet
+    "Transportation":         SECTOR_INDUSTRIAL,
+}
+
+
 def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     """Return (sector_key, sub_sector_folder) for a NASDAQ screener row.
-    None means the ticker doesn't fit any extended-screener sector
-    (e.g. Healthcare/Tech/Energy/Industrials are handled by their own
-    sector modules, not by this cross-sector classifier).
+
+    Two-pass classification:
+      1. Industry-specific mapping (INDUSTRY_TO_SECTOR_SUB) - precise
+         sub-sector when we recognise the industry.
+      2. NASDAQ sector fallback (ND_SECTOR_TO_DASHBOARD) - any ticker
+         whose industry we don't recognise falls into 'Other' within
+         its NASDAQ-declared sector. So every ticker that NASDAQ knows
+         lands somewhere.
+
+    Returns None only if we have neither industry nor a recognisable
+    sector to map to.
     """
     industry = (row.get("industry") or "").strip()
+    sector_str = (row.get("sector") or "").strip()
     name = row.get("name") or ""
 
     mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
-    if mapped is None:
-        return None
+    if mapped is not None:
+        sector, sub = mapped
+        if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
+            sub = "Crypto_Adjacent"
+        return sector, sub
 
-    sector, sub = mapped
-    # Crypto-adjacent override in Financials
-    if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
-        sub = "Crypto_Adjacent"
-    return sector, sub
+    # Fallback: route to the NASDAQ-declared sector's 'Other' bucket
+    fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str)
+    if fallback_sector is None:
+        return None
+    if fallback_sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
+        return SECTOR_FINANCIALS, "Crypto_Adjacent"
+    return fallback_sector, "Other"
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)

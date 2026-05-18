@@ -83,6 +83,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Fintech":             ("Fintech",               ACCENT, ROOT / "Technology" / "Fintech"),
         "Telecom":             ("Telecom",               ACCENT, ROOT / "Technology" / "Telecom"),
         "IT_Services":         ("IT Services",           ACCENT, ROOT / "Technology" / "IT_Services"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Technology" / "Other"),
     },
     "Energy": {
         "Exploration_Production":      ("Exploration & Production",      ACCENT, ROOT / "Energy" / "Exploration_Production"),
@@ -90,6 +91,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Midstream":                   ("Midstream",                     ACCENT, ROOT / "Energy" / "Midstream"),
         "Renewable_Energy":            ("Renewable Energy",              ACCENT, ROOT / "Energy" / "Renewable_Energy"),
         "Coal_Uranium":                ("Coal & Uranium",                ACCENT, ROOT / "Energy" / "Coal_Uranium"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Energy" / "Other"),
     },
     "Industrials": {
         "Aerospace_Defense":        ("Aerospace & Defense",        ACCENT, ROOT / "Industrials" / "Aerospace_Defense"),
@@ -98,6 +100,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Construction_Engineering": ("Construction & Engineering", ACCENT, ROOT / "Industrials" / "Construction_Engineering"),
         "Electrical_Equipment":     ("Electrical Equipment",       ACCENT, ROOT / "Industrials" / "Electrical_Equipment"),
         "Industrial_Services":      ("Industrial Services",        ACCENT, ROOT / "Industrials" / "Industrial_Services"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Industrials" / "Other"),
     },
     "Materials": {
         "Precious_Metals":          ("Precious Metals",            ACCENT, ROOT / "Materials" / "Precious_Metals"),
@@ -108,6 +111,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Steel_Iron":               ("Steel & Iron",               ACCENT, ROOT / "Materials" / "Steel_Iron"),
         "Specialty_Chemicals":      ("Specialty Chemicals",        ACCENT, ROOT / "Materials" / "Specialty_Chemicals"),
         "Construction_Materials":   ("Construction Materials",     ACCENT, ROOT / "Materials" / "Construction_Materials"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Materials" / "Other"),
     },
     "Consumer Discretionary": {
         "Retail_Specialty":         ("Retail & Specialty Stores",  ACCENT, ROOT / "Consumer_Discretionary" / "Retail_Specialty"),
@@ -118,6 +122,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Gaming_Entertainment":     ("Gaming & Entertainment",     ACCENT, ROOT / "Consumer_Discretionary" / "Gaming_Entertainment"),
         "Home_Garden":              ("Home & Garden",              ACCENT, ROOT / "Consumer_Discretionary" / "Home_Garden"),
         "E_commerce":               ("E-commerce",                 ACCENT, ROOT / "Consumer_Discretionary" / "E_commerce"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Consumer_Discretionary" / "Other"),
     },
     "Financials": {
         "Regional_Banks":           ("Regional Banks",             ACCENT, ROOT / "Financials" / "Regional_Banks"),
@@ -128,6 +133,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "BDCs":                     ("BDCs",                       ACCENT, ROOT / "Financials" / "BDCs"),
         "Specialty_Finance":        ("Specialty Finance",          ACCENT, ROOT / "Financials" / "Specialty_Finance"),
         "Crypto_Adjacent":          ("Crypto-Adjacent",            ACCENT, ROOT / "Financials" / "Crypto_Adjacent"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Financials" / "Other"),
     },
     "Communication Services": {
         "Wireless_Wireline_Telecom": ("Wireless & Wireline Telecom", ACCENT, ROOT / "Communication_Services" / "Wireless_Wireline_Telecom"),
@@ -137,6 +143,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Social_Gaming_Platforms":   ("Social & Gaming Platforms",   ACCENT, ROOT / "Communication_Services" / "Social_Gaming_Platforms"),
         "Publishing_News":           ("Publishing & News",           ACCENT, ROOT / "Communication_Services" / "Publishing_News"),
         "Streaming":                 ("Streaming",                   ACCENT, ROOT / "Communication_Services" / "Streaming"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Communication_Services" / "Other"),
     },
     "Consumer Staples": {
         "Food_Beverage":         ("Food & Beverage",         ACCENT, ROOT / "Consumer_Staples" / "Food_Beverage"),
@@ -145,6 +152,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Personal_Care_Beauty":  ("Personal Care & Beauty",  ACCENT, ROOT / "Consumer_Staples" / "Personal_Care_Beauty"),
         "Tobacco_Vape":          ("Tobacco & Vape",          ACCENT, ROOT / "Consumer_Staples" / "Tobacco_Vape"),
         "Grocery_Distribution":  ("Grocery & Distribution",  ACCENT, ROOT / "Consumer_Staples" / "Grocery_Distribution"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Consumer_Staples" / "Other"),
     },
     "Real Estate": {
         "Diversified_REITs":          ("Diversified REITs",           ACCENT, ROOT / "Real_Estate" / "Diversified_REITs"),
@@ -155,6 +163,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Specialty_REITs":            ("Specialty REITs",             ACCENT, ROOT / "Real_Estate" / "Specialty_REITs"),
         "Mortgage_REITs":             ("Mortgage REITs",              ACCENT, ROOT / "Real_Estate" / "Mortgage_REITs"),
         "Proptech":                   ("Proptech",                    ACCENT, ROOT / "Real_Estate" / "Proptech"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Real_Estate" / "Other"),
     },
     "Healthcare Services": {
         "Hospitals_Health_Systems": ("Hospitals & Health Systems", ACCENT, ROOT / "Healthcare_Services" / "Hospitals_Health_Systems"),
@@ -163,6 +172,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Pharmacy_Distributors":    ("Pharmacy & Distributors",    ACCENT, ROOT / "Healthcare_Services" / "Pharmacy_Distributors"),
         "Medical_Devices":          ("Medical Devices",            ACCENT, ROOT / "Healthcare_Services" / "Medical_Devices"),
         "Dental_Vision_Hearing":    ("Dental, Vision & Hearing",   ACCENT, ROOT / "Healthcare_Services" / "Dental_Vision_Hearing"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Healthcare_Services" / "Other"),
     },
 }
 

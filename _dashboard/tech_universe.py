@@ -18,7 +18,9 @@ FINTECH  = "Fintech"
 TELECOM  = "Telecom"
 IT_SVC   = "IT_Services"
 
-FOLDERS = (SEMI, SW_SAAS, CLOUD, AI_ML, CYBER, CONS_ELC, FINTECH, TELECOM, IT_SVC)
+OTHER = "Other"
+
+FOLDERS = (SEMI, SW_SAAS, CLOUD, AI_ML, CYBER, CONS_ELC, FINTECH, TELECOM, IT_SVC, OTHER)
 
 
 @dataclass(frozen=True)

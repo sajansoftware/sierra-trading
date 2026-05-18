@@ -10,7 +10,9 @@ MID  = "Midstream"
 REN  = "Renewable_Energy"
 COAL = "Coal_Uranium"
 
-FOLDERS = (EP, OFS, MID, REN, COAL)
+OTHER = "Other"
+
+FOLDERS = (EP, OFS, MID, REN, COAL, OTHER)
 
 
 @dataclass(frozen=True)

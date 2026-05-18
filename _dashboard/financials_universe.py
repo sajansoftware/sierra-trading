@@ -15,11 +15,12 @@ BDCS                    = "BDCs"
 SPECIALTY_FINANCE       = "Specialty_Finance"
 CRYPTO_ADJACENT         = "Crypto_Adjacent"
 
+OTHER = "Other"
+
 FOLDERS = (
     REGIONAL_BANKS, INVESTMENT_BANKS_BROKERS, ASSET_MANAGEMENT,
     INSURANCE, FINTECH_PAYMENTS, BDCS, SPECIALTY_FINANCE,
-    CRYPTO_ADJACENT,
-)
+    CRYPTO_ADJACENT, OTHER)
 
 
 @dataclass(frozen=True)
