@@ -135,7 +135,15 @@ CATALYST_KEYWORDS: list[tuple[str, list[str]]] = [
     ("Clinical Data",     ["positive data", "topline", "interim data", "primary endpoint",
                            "met endpoint", "trial results", "study results", "data readout",
                            "phase 1 data", "phase 2 data", "phase 3 data",
-                           "phase i data", "phase ii data", "phase iii data"]),
+                           "phase i data", "phase ii data", "phase iii data",
+                           "study demonstrates", "study shows", "demonstrates predictive",
+                           "demonstrates efficacy", "shows efficacy", "shows benefit",
+                           "presents data", "presents results", "publication in",
+                           "published in", "peer-reviewed", "research demonstrates",
+                           "research shows", "clinical evidence", "preclinical data",
+                           "biomarker", "rppa", "cancer institute", "phase 1/2",
+                           "phase 2/3", "tumor response", "overall survival",
+                           "progression-free", "response rate", "durable response"]),
     ("Trial Enrollment",  ["enrollment", "enrolled", "first patient", "dosed first",
                            "patient dosed", "trial initiation", "begins enrolling",
                            "completes enrollment"]),
@@ -177,15 +185,23 @@ CATALYST_KEYWORDS: list[tuple[str, list[str]]] = [
 
 
 def classify_catalyst(title: str) -> str:
-    """Map a news headline to a catalyst type. Returns 'News' if nothing
-    matches; never returns 'Big move' (a non-sentiment placeholder)."""
+    """Map a news headline to a catalyst type. Returns 'No news' when
+    nothing in the taxonomy matches (so we never show a generic 'News'
+    label - either a real type or an explicit no-data marker)."""
     if not title:
-        return "News"
+        return "No news"
     t = title.lower()
+    # Filter out generic wire boilerplate that the news APIs return as
+    # 'catalyst' but isn't actually company-specific (e.g. AP's
+    # 'BC-Most Active Stocks').
+    GENERIC = ("most active stocks", "stocks moving", "biggest gainers",
+               "biggest losers", "market movers")
+    if any(g in t for g in GENERIC):
+        return "No news"
     for label, keywords in CATALYST_KEYWORDS:
         if any(kw in t for kw in keywords):
             return label
-    return "News"
+    return "No news"
 
 
 @st.cache_data(ttl=300, show_spinner=False)  # 5 min (intraday refresh)
@@ -315,7 +331,7 @@ def fetch_top_movers(
             r.setdefault("news_title", "")
             r.setdefault("news_link", "")
             r.setdefault("news_source", "—")
-            r.setdefault("news_type", "News")
+            r.setdefault("news_type", "No news")
 
     rows.sort(key=lambda r: r["move_pct"], reverse=True)
     return rows[:max_rows]
@@ -488,7 +504,7 @@ def fetch_premarket_catalysts(
                     ctype = f["type"]
                     break
         if not ctype:
-            ctype = "News"
+            ctype = "No news"
         if not source:
             source = "—"
 
@@ -627,7 +643,7 @@ def fetch_5y_catalysts(
                 ctype = best_f["type"]
 
         if not ctype:
-            ctype = "News"
+            ctype = "No news"
         if not source:
             source = "—"
 

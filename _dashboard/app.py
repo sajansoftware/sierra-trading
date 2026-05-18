@@ -448,7 +448,7 @@ CATALYST_TYPE_COLOR = {
     "Guidance":         "#a78bfa",
     "Patent":           "#94a3b8",
     "Analyst":          "#94a3b8",
-    "News":             "#94a3b8",
+    "No news":          "#475569",
     # Bearish-leaning (orange / red)
     "Offering":         "#f97316",
     "Private Placement":"#f97316",
@@ -489,25 +489,6 @@ def catalyst_dialog(ticker: str) -> None:
             "(close $1–$20, PM upside ≥ 30%)."
         )
         if st.button("Close", key="close_empty"):
-            _close_dialog()
-            st.rerun()
-        return
-
-    # Type filter populated from the actual rows present
-    types_present = sorted({r["type"] for r in rows})
-    selected_types = st.multiselect(
-        "Filter by catalyst type",
-        options=types_present,
-        default=types_present,
-        key=f"type_filter_{ticker}",
-        label_visibility="collapsed",
-        placeholder="Filter by catalyst type…",
-    )
-    if selected_types and len(selected_types) < len(types_present):
-        rows = [r for r in rows if r["type"] in selected_types]
-    if not rows:
-        st.info("No rows match the selected catalyst types.")
-        if st.button("Close", key="close_filt_empty"):
             _close_dialog()
             st.rerun()
         return

@@ -50,9 +50,9 @@ ITEM_MAP: dict[str, tuple[str, str]] = {
     "5.02": ("Insider",       "Departure / Election of Directors or Officers"),
     "5.03": ("Insider",       "Amendments to Articles of Incorporation or Bylaws"),
     "5.07": ("Insider",       "Submission of Matters to a Vote of Security Holders"),
-    "7.01": ("News",          "Regulation FD Disclosure"),
-    "8.01": ("News",          "Other Events"),
-    "9.01": ("News",          "Financial Statements and Exhibits"),
+    "7.01": ("No news",       "Regulation FD Disclosure"),
+    "8.01": ("No news",       "Other Events"),
+    "9.01": ("No news",       "Financial Statements and Exhibits"),
 }
 
 
@@ -131,7 +131,7 @@ def fetch_8k_filings(ticker: str, years_back: int = 5) -> list[dict]:
         item_str = (items[i] if i < len(items) else "") or ""
         item_codes = [c.strip() for c in item_str.split(",") if c.strip()]
         # Best catalyst type: first item whose code we recognise
-        ctype = "News"
+        ctype = "No news"
         desc = "Material event filing (8-K)"
         for code in item_codes:
             if code in ITEM_MAP:
