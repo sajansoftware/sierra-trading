@@ -325,11 +325,10 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
             name = (q.name or q.ticker).strip()
             blurb = short_blurb(q.summary) or (q.industry or "")
             company = f"{name} — {blurb}" if blurb else name
-        # NEW-TAB link: opens the catalyst window in a separate browser
-        # tab via ?ticker=X&catalyst_only=1. Main dashboard never reruns.
+        # Same-window link: only this cell is clickable, so clicking
+        # anywhere else in the row does nothing.
         ticker_link = (
-            f"<a href='?ticker={q.ticker}&catalyst_only=1' target='_blank' "
-            f"rel='noopener' "
+            f"<a href='?ticker={q.ticker}' target='_self' "
             f"style='color:{WHITE};font-weight:700;text-decoration:none;"
             f"border-bottom:1px dotted {ACCENT};'>{q.ticker}</a>"
         )
@@ -444,9 +443,8 @@ def _close_dialog() -> None:
 
 
 
-def _render_catalyst_body(ticker: str, show_close_button: bool = True) -> None:
-    """Renders the catalyst content. Used by both the dialog and the
-    standalone full-page (new-tab) view."""
+@st.dialog("Catalysts", width="large")
+def catalyst_dialog(ticker: str) -> None:
     with st.spinner("Loading pre-market catalysts…"):
         rows = fetch_premarket_catalysts(ticker)
 
@@ -464,6 +462,9 @@ def _render_catalyst_body(ticker: str, show_close_button: bool = True) -> None:
             "No qualifying pre-market catalyst days in the last 60 days "
             "(close $1–$20, PM upside ≥ 30%)."
         )
+        if st.button("Close", key="close_empty"):
+            _close_dialog()
+            st.rerun()
         return
 
     head_cells = "".join(
@@ -543,22 +544,9 @@ def _render_catalyst_body(ticker: str, show_close_button: bool = True) -> None:
         unsafe_allow_html=True,
     )
 
-
-@st.dialog("Catalysts", width="large")
-def catalyst_dialog(ticker: str) -> None:
-    """In-app dialog wrapper. Most ticker clicks now open in a new
-    tab (see render_catalyst_page) but this is kept as a backup."""
-    _render_catalyst_body(ticker)
     if st.button("Close", key="close_dlg"):
         _close_dialog()
         st.rerun()
-
-
-def render_catalyst_page(ticker: str) -> None:
-    """Standalone full-page catalyst view rendered when the URL has
-    ?ticker=X&catalyst_only=1 (new-tab target). No sidebar, no sector
-    table - just the catalyst content."""
-    _render_catalyst_body(ticker, show_close_button=False)
 
 
 # =============================================================================
@@ -800,8 +788,7 @@ def render_top_movers() -> None:
     body_rows = []
     for r in movers:
         ticker_html = (
-            f"<a href='?ticker={r['ticker']}&catalyst_only=1' target='_blank' "
-            f"rel='noopener' "
+            f"<a href='?ticker={r['ticker']}' target='_self' "
             f"style='color:{WHITE};font-weight:700;text-decoration:none;"
             f"border-bottom:1px dotted {ACCENT};'>{r['ticker']}</a>"
         )
@@ -1048,19 +1035,16 @@ def main() -> None:
         st.cache_data.clear()
         st.session_state.last_data_date = today_et
 
-    # New-tab catalyst view: ?ticker=X&catalyst_only=1 short-circuits
-    # the whole dashboard and renders only the catalyst content. Main
-    # browser tab (without these params) is never affected by clicks.
+    # Ticker click -> ?ticker=XXX. Capture, set session state, then clear
+    # the URL so refreshing or closing the dialog doesn't re-open it.
     qp_ticker = st.query_params.get("ticker")
-    catalyst_only = st.query_params.get("catalyst_only")
-    if qp_ticker and catalyst_only:
-        render_catalyst_page(qp_ticker.strip().upper())
-        return
-
-    # Legacy in-app dialog flow (kept as fallback)
     if qp_ticker:
         st.session_state.selected_ticker = qp_ticker.strip().upper()
         st.query_params.clear()
+
+    # Open the catalyst dialog FIRST (before any sector loading) so the
+    # popup appears immediately on ticker click. Single-shot consume:
+    # subsequent reruns see None and let Streamlit dismiss the dialog.
     pending_dialog = st.session_state.selected_ticker
     if pending_dialog:
         st.session_state.selected_ticker = None
