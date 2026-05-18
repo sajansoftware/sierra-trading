@@ -166,17 +166,29 @@ def fetch_top_movers(
     LOD / HOD reported below are pre-market low / pre-market high
     (not full-day). Returns rows sorted by PM move descending.
     """
-    # Enrich quotes with Finviz fallback so the float filter has
-    # something to work with even when yfinance .info 401s.
-    quotes = fetch_quotes(universe_tickers)
-    needs_fv = [
-        q.ticker for q in quotes.values()
-        if q.passes_filter() and (q.float_shares is None or q.float_shares <= 0)
-    ]
-    fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv)))) if needs_fv else {}
+    # FAST path: build seeds from NASDAQ + Finviz, skip yfinance .info
+    # (it 401s constantly). yfinance.history per eligible ticker below
+    # computes the actual PM move.
+    nd_prices = nasdaq_price_map()
+    seeds: dict[str, Quote] = {}
+    for t in universe_tickers:
+        nd = nd_prices.get(t)
+        if nd is None:
+            continue
+        nd_price, nd_sector, nd_industry, nd_mc = nd
+        if not (MIN_PRICE <= nd_price <= MAX_PRICE):
+            continue
+        seeds[t] = Quote(
+            ticker=t, price=nd_price, previous_close=nd_price,
+            float_shares=None,
+            market_cap=int(nd_mc) if nd_mc else None,
+            sector=nd_sector, industry=nd_industry,
+            name=t, summary=None,
+        )
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
     enriched_quotes: dict[str, Quote] = {}
-    for t, q in quotes.items():
-        enriched_quotes[t] = _enrich_with_fallbacks(q, None, fv_stats.get(t), None)
+    for t, seed in seeds.items():
+        enriched_quotes[t] = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
 
     eligible = [
         q for q in enriched_quotes.values()
@@ -738,71 +750,60 @@ def filtered_by_category(
 ) -> dict[str, list[Quote]]:
     """Return surviving quotes grouped by folder.
 
-    Pipeline:
-      1. yfinance fetch for live close + float (preferred).
-      2. If yfinance returns no data, fall back to NASDAQ's last sale
-         so the ticker still appears when it was in the $1-$20 band at
-         the last NASDAQ snapshot.
-    """
-    quotes = fetch_quotes(tuple(sorted(ticker_list)))
-    nd_prices = nasdaq_price_map()
-    result: dict[str, list[Quote]] = {}
-    needs_fv: list[str] = []   # tickers missing float OR market_cap
+    FAST path:
+      1. Build seed Quotes from cached NASDAQ snapshot (price/sector/
+         industry/mcap/name) - no per-ticker network call.
+      2. Parallel Finviz enrichment (workers=10) for float / mcap /
+         shares-out. Disk-cached 7d per ticker so the second visit
+         per week is instant.
+      3. Filter by passes_full_criteria (price $1-$20 + float<20M).
+      4. NASDAQ profile descriptions for surviving tickers.
 
+    yfinance .info is skipped here - it 401s constantly and burns
+    minutes per cold load. yfinance.history is still used for the
+    catalyst dialog (different endpoint, more reliable).
+    """
+    nd_prices = nasdaq_price_map()
+
+    seeds: dict[str, Quote] = {}
+    for t in ticker_list:
+        nd = nd_prices.get(t)
+        if nd is None:
+            continue
+        nd_price, nd_sector, nd_industry, nd_mc = nd
+        if not (MIN_PRICE <= nd_price <= MAX_PRICE):
+            continue
+        seeds[t] = Quote(
+            ticker=t,
+            price=nd_price,
+            previous_close=nd_price,
+            float_shares=None,
+            market_cap=int(nd_mc) if nd_mc else None,
+            sector=nd_sector,
+            industry=nd_industry,
+            name=t,
+            summary=None,
+        )
+
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
+
+    enriched_pass: dict[str, Quote] = {}
+    for t, seed in seeds.items():
+        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
+        if eq.passes_full_criteria():
+            enriched_pass[t] = eq
+
+    nd_descs = _nasdaq_descriptions_batch(tuple(sorted(enriched_pass.keys()))) if enriched_pass else {}
+    for t, eq in list(enriched_pass.items()):
+        desc = nd_descs.get(t)
+        if desc and not eq.summary:
+            enriched_pass[t] = dc_replace(eq, summary=desc)
+
+    result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():
-        rows: list[Quote] = []
-        for t in tickers:
-            q = quotes.get(t)
-            usable = q is not None and q.passes_filter()
-            if not usable:
-                nd = nd_prices.get(t)
-                if nd is None:
-                    continue
-                nd_price, nd_sector, nd_industry, nd_mc = nd
-                if not (MIN_PRICE <= nd_price <= MAX_PRICE):
-                    continue
-                q = Quote(
-                    ticker=t,
-                    price=nd_price,
-                    previous_close=nd_price,
-                    float_shares=None,
-                    market_cap=int(nd_mc) if nd_mc else None,
-                    sector=nd_sector,
-                    industry=nd_industry,
-                    name=t,
-                    summary=None,
-                )
-            rows.append(q)
-            if (q.float_shares is None or q.float_shares <= 0
-                    or q.market_cap is None or q.market_cap <= 0):
-                needs_fv.append(t)
+        rows = [enriched_pass[t] for t in tickers if t in enriched_pass]
         rows.sort(key=lambda q: (q.float_shares or 1e12))
         result[folder] = rows
-
-    # Backfill missing float / market_cap from Finviz, and missing
-    # company descriptions from the NASDAQ company-profile API.
-    needs_desc = [
-        q.ticker for rows in result.values() for q in rows if not q.summary
-    ]
-    fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv)))) if needs_fv else {}
-    nd_descs = _nasdaq_descriptions_batch(tuple(sorted(set(needs_desc)))) if needs_desc else {}
-
-    for folder, rows in result.items():
-        enriched: list[Quote] = []
-        for q in rows:
-            eq = _enrich_with_fallbacks(
-                q,
-                nd_prices.get(q.ticker),
-                fv_stats.get(q.ticker),
-                nd_descs.get(q.ticker),
-            )
-            # Final criterion: price $1-$20 AND known float < 20M.
-            # Float is checked AFTER enrichment so the Finviz/shares_out
-            # fallback has a chance to populate it.
-            if eq.passes_full_criteria():
-                enriched.append(eq)
-        enriched.sort(key=lambda q: (q.float_shares or 1e12))
-        result[folder] = enriched
     return result
 
 
