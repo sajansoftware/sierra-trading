@@ -44,12 +44,16 @@ class Quote:
         return self.previous_close if self.previous_close is not None else self.price
 
     def passes_filter(self) -> bool:
-        if self.error or self.close is None or self.float_shares is None:
+        """Save-to-database criterion: close priced between $1 and $20.
+
+        Float is *informational only* — the ticker is included even if
+        yfinance can't return floatShares (which happens intermittently
+        when Yahoo 401s on the .info endpoint). Float still displays
+        in the table when available.
+        """
+        if self.error or self.close is None:
             return False
-        return (
-            MIN_PRICE <= self.close <= MAX_PRICE
-            and self.float_shares < MAX_FLOAT
-        )
+        return MIN_PRICE <= self.close <= MAX_PRICE
 
 
 def _resolve_float_shares(info: dict) -> int | None:
@@ -152,11 +156,11 @@ def fetch_top_movers(
     quotes = fetch_quotes(universe_tickers)
     eligible = [
         q for q in quotes.values()
-        if q.passes_filter()
-        and q.float_shares
-        and q.float_shares < max_float
-        and q.previous_close
-        and q.previous_close > 0
+        if q.passes_filter()                              # price $1-$20
+        and q.previous_close and q.previous_close > 0     # need a baseline
+        # Float is informational: include when unknown; only exclude when
+        # we know it's above the cap.
+        and (q.float_shares is None or q.float_shares < max_float)
     ]
 
     try:
@@ -582,16 +586,73 @@ def fetch_quotes(tickers: tuple[str, ...]) -> dict[str, Quote]:
     return out
 
 
+@st.cache_data(ttl=86_400, show_spinner=False)
+def nasdaq_price_map() -> dict[str, tuple[float, str, str]]:
+    """ticker -> (last_price, sector, industry) from the cached NASDAQ
+    screener. Used as a fallback when yfinance .info 401s and we have
+    no live close - we still want to surface the ticker if NASDAQ
+    last-saw it in the $1-$20 band."""
+    try:
+        from screener import fetch_nasdaq_universe, _parse_price
+        raw = fetch_nasdaq_universe()
+    except Exception:
+        return {}
+    out: dict[str, tuple[float, str, str]] = {}
+    for r in raw:
+        sym = (r.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        p = _parse_price(r.get("lastsale"))
+        if p is None:
+            continue
+        out[sym] = (p, (r.get("sector") or "").strip(),
+                       (r.get("industry") or "").strip())
+    return out
+
+
 def filtered_by_category(
     universe_dict: dict[str, list[str]],
     ticker_list: list[str],
 ) -> dict[str, list[Quote]]:
-    """Return surviving quotes grouped by folder from the given universe."""
+    """Return surviving quotes grouped by folder.
+
+    Pipeline:
+      1. yfinance fetch for live close + float (preferred).
+      2. If yfinance returns no data, fall back to NASDAQ's last sale
+         so the ticker still appears when it was in the $1-$20 band at
+         the last NASDAQ snapshot.
+    """
     quotes = fetch_quotes(tuple(sorted(ticker_list)))
+    nd_prices = nasdaq_price_map()
     result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():
-        rows = [quotes[t] for t in tickers if t in quotes and quotes[t].passes_filter()]
-        rows.sort(key=lambda q: (q.float_shares or 0))
+        rows: list[Quote] = []
+        for t in tickers:
+            q = quotes.get(t)
+            usable = q is not None and q.passes_filter()
+            if not usable:
+                # yfinance had no data (or returned a price outside range).
+                # If NASDAQ last saw this ticker in range, synthesize a
+                # NASDAQ-sourced Quote so it still surfaces.
+                nd = nd_prices.get(t)
+                if nd is None:
+                    continue
+                nd_price, nd_sector, nd_industry = nd
+                if not (MIN_PRICE <= nd_price <= MAX_PRICE):
+                    continue
+                q = Quote(
+                    ticker=t,
+                    price=nd_price,
+                    previous_close=nd_price,
+                    float_shares=None,
+                    market_cap=None,
+                    sector=nd_sector,
+                    industry=nd_industry,
+                    name=t,
+                    summary=None,
+                )
+            rows.append(q)
+        rows.sort(key=lambda q: (q.float_shares or 1e12))
         result[folder] = rows
     return result
 

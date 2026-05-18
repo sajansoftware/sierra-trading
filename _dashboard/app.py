@@ -664,7 +664,7 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
           </span>
           <span style="font-size:0.78rem;color:{WHITE_MUTE};">
             ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
-            Float &lt; {MAX_FLOAT/1_000_000:.0f}M &nbsp;·&nbsp;
+            Float column informational &nbsp;·&nbsp;
             yfinance / 15m cache
           </span>
         </div>""",
@@ -829,7 +829,6 @@ def render_top_movers() -> None:
         <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
           Pre-market window 4:00 AM – 9:29 AM ET
           &nbsp;·&nbsp; ${MIN_PRICE:.0f}–${MAX_PRICE:.0f}
-          &nbsp;·&nbsp; Float &lt; {MAX_FLOAT/1_000_000:.0f}M
           &nbsp;·&nbsp; PM move vs prior close ≥ 20%
           &nbsp;·&nbsp; 5-min cache</div>""",
         unsafe_allow_html=True,
@@ -1237,7 +1236,7 @@ def main() -> None:
           letter-spacing:-0.5px;margin-bottom:4px;">Sierra Trading</div>
         <div style="font-size:0.9rem;color:{WHITE_DIM};margin-bottom:20px;">
           ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
-          Float &lt; {MAX_FLOAT/1_000_000:.0f}M &nbsp;·&nbsp;
+          Float column informational &nbsp;·&nbsp;
           {ticker_count}</div>""",
         unsafe_allow_html=True,
     )
