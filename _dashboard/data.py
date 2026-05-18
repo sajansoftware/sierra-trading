@@ -837,16 +837,20 @@ def _filtered_by_category_impl(
 
     fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
 
+    # Read NASDAQ company descriptions from disk cache (no live HTTP).
+    # Disk cache fills lazily via the catalyst dialog / per-ticker paths
+    # and is shipped with the repo so deploys carry coverage.
+    try:
+        from verifier import fetch_nasdaq_desc_cached_only
+    except Exception:
+        fetch_nasdaq_desc_cached_only = lambda t: ""
+
     enriched_pass: dict[str, Quote] = {}
     for t, seed in seeds.items():
-        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
+        desc = fetch_nasdaq_desc_cached_only(t) or None
+        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), desc)
         if eq.passes_full_criteria():
             enriched_pass[t] = eq
-
-    # NOTE: NASDAQ company-profile descriptions used to be fetched here
-    # for every passing ticker (~1000+ HTTP calls). That dominated cold-
-    # cache load times. Description now falls back to industry+name in
-    # quotes_to_df. The catalyst dialog still has full per-ticker data.
 
     result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():

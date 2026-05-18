@@ -288,3 +288,68 @@ def verify_categorization(ticker: str, sector: str) -> tuple[list[SourceCheck], 
     else:
         confidence = "none"
     return checks, confidence
+
+
+# =============================================================================
+# Disk-backed NASDAQ description cache (for the Description column)
+# =============================================================================
+import json as _json
+import time as _time
+from pathlib import Path as _Path
+
+_NASDAQ_DESC_CACHE = _Path(__file__).parent / ".nasdaq_desc_cache.json"
+_NASDAQ_DESC_TTL = 30 * 86_400        # 30 days per entry
+_nasdaq_desc_mem: dict | None = None
+
+
+def _load_nasdaq_desc_disk() -> dict:
+    global _nasdaq_desc_mem
+    if _nasdaq_desc_mem is not None:
+        return _nasdaq_desc_mem
+    if _NASDAQ_DESC_CACHE.exists():
+        try:
+            _nasdaq_desc_mem = _json.loads(_NASDAQ_DESC_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            _nasdaq_desc_mem = {}
+    else:
+        _nasdaq_desc_mem = {}
+    return _nasdaq_desc_mem
+
+
+def _save_nasdaq_desc_disk(data: dict) -> None:
+    try:
+        _NASDAQ_DESC_CACHE.write_text(_json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def fetch_nasdaq_desc_cached_only(ticker: str) -> str:
+    """Return the cached NASDAQ description (or '' if not cached / expired)."""
+    disk = _load_nasdaq_desc_disk()
+    entry = disk.get(ticker.upper())
+    if entry and (_time.time() - entry.get("_t", 0)) < _NASDAQ_DESC_TTL:
+        return entry.get("d", "")
+    return ""
+
+
+def fetch_nasdaq_desc(ticker: str) -> str:
+    """Disk-cached single NASDAQ description fetch. 30d TTL."""
+    cached = fetch_nasdaq_desc_cached_only(ticker)
+    if cached:
+        return cached
+    raw = _nasdaq_profile_raw(ticker)
+    data = (raw.get("data") or {}) if isinstance(raw, dict) else {}
+    desc = ""
+    for k in ("CompanyDescription", "companyDescription",
+              "Description", "description", "BusinessDescription"):
+        v = data.get(k)
+        if isinstance(v, dict):
+            v = v.get("value") or v.get("text") or ""
+        if v:
+            desc = _short_sentence(str(v).strip(), max_chars=220)
+            break
+    if desc:
+        disk = _load_nasdaq_desc_disk()
+        disk[ticker.upper()] = {"d": desc, "_t": _time.time()}
+        _save_nasdaq_desc_disk(disk)
+    return desc
