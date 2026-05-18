@@ -55,7 +55,13 @@ class Quote:
         return MIN_PRICE <= self.close <= MAX_PRICE
 
     def passes_full_criteria(self) -> bool:
-        """Full criterion: price $1-$20 AND known float < 20M."""
+        """Strict criterion: price $1-$20 AND a known float strictly under 20M.
+
+        Float-source fallback chain (in filtered_by_category):
+          yfinance -> Finviz -> Finviz shares_out * 0.7
+        If none of those returned a number, the ticker is excluded
+        (we can't honor the float<20M constraint without the data).
+        """
         if not self.passes_filter():
             return False
         if self.float_shares is None or self.float_shares <= 0:
