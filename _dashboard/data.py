@@ -665,6 +665,9 @@ def tv_num(n: float | int | None) -> str:
         f = float(n)
     except (TypeError, ValueError):
         return "—"
+    # pandas turns None into NaN inside DataFrames; treat NaN/inf as missing
+    if f != f or f in (float("inf"), float("-inf")):
+        return "—"
     sign = "-" if f < 0 else ""
     f = abs(f)
     if f >= 1e12:
