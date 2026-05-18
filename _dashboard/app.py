@@ -28,6 +28,7 @@ from data import (
     MIN_PRICE,
     Quote,
     fetch_premarket_catalysts,
+    fetch_top_movers,
     filtered_by_category,
     short_blurb,
     tv_num,
@@ -643,6 +644,111 @@ def render_journal() -> None:
 
 
 # =============================================================================
+# Today's top moves
+# =============================================================================
+def render_top_movers() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Today's Top Moves</div>
+        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
+          Pre-market window 4:00 AM – 9:29 AM ET
+          &nbsp;·&nbsp; ${MIN_PRICE:.0f}–${MAX_PRICE:.0f}
+          &nbsp;·&nbsp; Float &lt; {MAX_FLOAT/1_000_000:.0f}M
+          &nbsp;·&nbsp; PM move vs prior close ≥ 20%
+          &nbsp;·&nbsp; 5-min cache</div>""",
+        unsafe_allow_html=True,
+    )
+
+    # Pool of tickers = every curated INFO across sectors
+    pool: set[str] = set()
+    for mod in (bio_universe, tech_universe, energy_universe, industrials_universe):
+        try:
+            pool.update(mod.INFO.keys())
+        except Exception:
+            continue
+
+    with st.spinner("Scanning today's tape…"):
+        movers = fetch_top_movers(tuple(sorted(pool)))
+
+    if not movers:
+        st.info("No tickers in the universe moved ≥ 20% during pre-market today.")
+        return
+
+    head_cells = "".join(
+        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Ticker","left"), ("PM Low","right"), ("PM High","right"),
+            ("PM Move","right"), ("Type","left"),
+            ("Catalyst","left"), ("Source","center"),
+        ]
+    )
+
+    body_rows = []
+    for r in movers:
+        ticker_html = (
+            f"<a href='?ticker={r['ticker']}' target='_self' "
+            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
+            f"border-bottom:1px dotted {ACCENT};'>{r['ticker']}</a>"
+        )
+        type_label = r["news_type"]
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        )
+        catalyst_text = (
+            r["news_title"] if r["news_title"]
+            else f"<span style='color:#64748b;'>—</span>"
+        )
+        source_label = r.get("news_source") or "—"
+        if r["news_link"] and source_label != "—":
+            source_html = (
+                f"<a href='{r['news_link']}' target='_blank' "
+                f"style='color:{ACCENT};text-decoration:none;"
+                f"font-size:0.78rem;white-space:nowrap;'>{source_label} ↗</a>"
+            )
+        else:
+            source_html = (
+                f"<span style='color:#64748b;font-size:0.78rem;'>"
+                f"{source_label}</span>"
+            )
+        move = r["move_pct"]
+        move_color = GOOD if move >= 50 else (WARN if move >= 30 else ACCENT)
+        body_rows.append(
+            f"<tr>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{ticker_html}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};text-align:right;'>${r['lod']:.2f}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};text-align:right;font-weight:600;'>${r['hod']:.2f}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{move_color};text-align:right;font-weight:700;'>+{move:.1f}%</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{type_badge}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;'>{catalyst_text}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;'>{source_html}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"""<table class='sierra-table'>
+          <thead><tr>{head_cells}</tr></thead>
+          <tbody>{''.join(body_rows)}</tbody>
+        </table>""",
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
 # IPO calendar
 # =============================================================================
 SECTOR_BADGE_COLOR = {
@@ -884,6 +990,15 @@ def main() -> None:
 
             st.divider()
             if st.button(
+                "📈 Today's Top Moves",
+                use_container_width=True,
+                key="top_movers_btn",
+                type="primary" if st.session_state.view == "movers" else "secondary",
+            ):
+                st.session_state.view = "movers"
+                st.rerun()
+
+            if st.button(
                 "📅 IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
@@ -902,6 +1017,15 @@ def main() -> None:
 
     if is_journal:
         render_journal()
+        return
+
+    if st.session_state.view == "movers":
+        render_top_movers()
+        # Catalyst dialog should still work from the movers table
+        pending = st.session_state.selected_ticker
+        if pending:
+            st.session_state.selected_ticker = None
+            catalyst_dialog(pending)
         return
 
     if st.session_state.view == "ipo":

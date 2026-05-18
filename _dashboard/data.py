@@ -130,6 +130,119 @@ def classify_catalyst(title: str) -> str:
     return "News"
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # 5 min (intraday refresh)
+def fetch_top_movers(
+    universe_tickers: tuple[str, ...],
+    min_pct: float = 20.0,
+    min_price: float = 1.0,
+    max_price: float = 20.0,
+    max_float: int = 20_000_000,
+    max_rows: int = 40,
+) -> list[dict]:
+    """Today's biggest *pre-market* movers across the universe.
+
+    A ticker qualifies when:
+      - close $1-$20 and free float < 20M (passes_filter)
+      - pre-market move (PM high vs prior close) >= min_pct
+        within the 4:00 AM - 9:29 AM ET window
+
+    LOD / HOD reported below are pre-market low / pre-market high
+    (not full-day). Returns rows sorted by PM move descending.
+    """
+    quotes = fetch_quotes(universe_tickers)
+    eligible = [
+        q for q in quotes.values()
+        if q.passes_filter()
+        and q.float_shares
+        and q.float_shares < max_float
+        and q.previous_close
+        and q.previous_close > 0
+    ]
+
+    try:
+        from zoneinfo import ZoneInfo
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        today_et = datetime.now().astimezone().date()
+
+    def _today_pm_move(q: Quote) -> dict | None:
+        try:
+            hist = yf.Ticker(q.ticker).history(
+                period="1d", interval="5m", prepost=True, auto_adjust=True,
+            )
+            if hist is None or hist.empty:
+                return None
+            try:
+                hist.index = hist.index.tz_convert("America/New_York")
+            except Exception:
+                pass
+            # Restrict to today's bars, then to the 4:00-9:29 ET pre-market.
+            day_bars = hist[hist.index.date == today_et]
+            if day_bars.empty:
+                return None
+            pm_bars = day_bars.between_time("04:00", "09:29")
+            if pm_bars.empty:
+                return None
+            pm_high = float(pm_bars["High"].max())
+            pm_low = float(pm_bars["Low"].min())
+            move_pct = (pm_high - q.previous_close) / q.previous_close * 100.0
+            if move_pct < min_pct:
+                return None
+            return {
+                "ticker":     q.ticker,
+                "name":       q.name or q.ticker,
+                "prev_close": q.previous_close,
+                "lod":        pm_low,
+                "hod":        pm_high,
+                "move_pct":   move_pct,
+                "float":      q.float_shares,
+            }
+        except Exception:
+            return None
+
+    rows: list[dict] = []
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        for r in pool.map(_today_pm_move, eligible):
+            if r:
+                rows.append(r)
+
+    # Enrich with today's news headline (Finviz first, then any source)
+    try:
+        from news_sources import fetch_finviz_news, fetch_yahoo_rss
+        for r in rows:
+            news_items = []
+            try:
+                news_items.extend(fetch_finviz_news(r["ticker"]))
+            except Exception:
+                pass
+            try:
+                news_items.extend(fetch_yahoo_rss(r["ticker"]))
+            except Exception:
+                pass
+            # Prefer same-day, then most recent
+            todays = [n for n in news_items if n["date"] == today_et]
+            best = todays[0] if todays else (news_items[0] if news_items else None)
+            if best:
+                r["news_title"] = best["title"]
+                r["news_link"] = best["link"]
+                r["news_source"] = best["source"]
+                r["news_type"] = classify_catalyst(best["title"])
+            else:
+                r["news_title"] = ""
+                r["news_link"] = ""
+                r["news_source"] = "—"
+                r["news_type"] = "News"
+    except Exception:
+        for r in rows:
+            r.setdefault("news_title", "")
+            r.setdefault("news_link", "")
+            r.setdefault("news_source", "—")
+            r.setdefault("news_type", "News")
+
+    rows.sort(key=lambda r: r["move_pct"], reverse=True)
+    return rows[:max_rows]
+
+
 @st.cache_data(ttl=3_600, show_spinner=False)  # 1 hour (intraday-sensitive)
 def fetch_premarket_catalysts(
     ticker: str,
