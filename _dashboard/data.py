@@ -709,8 +709,15 @@ def _enrich_with_fallbacks(
     fv: dict | None,
     nd_desc: str | None,
 ) -> Quote:
-    """Fill missing float / market_cap / summary on a Quote from Finviz
-    snapshot stats, NASDAQ screener seed, and NASDAQ profile description."""
+    """Fill missing float / market_cap / summary on a Quote.
+
+    Float-source chain (best to worst):
+      1. yfinance .floatShares (when present on the seed)
+      2. Finviz Shs Float
+      3. Finviz Shs Outstand * 0.70
+      4. NASDAQ market_cap / price * 0.70  <- guarantees a number
+         for every ticker that has both price and mcap.
+    """
     float_shares = q.float_shares
     market_cap = q.market_cap
     summary = q.summary
@@ -720,8 +727,6 @@ def _enrich_with_fallbacks(
         if fs:
             float_shares = fs
         else:
-            # Last-resort estimate: 70% of shares outstanding when float
-            # is unreported (typical low-insider micro-cap heuristic).
             so = fv.get("shares_out")
             if so:
                 float_shares = int(so * 0.70)
@@ -731,6 +736,10 @@ def _enrich_with_fallbacks(
             market_cap = mc
     if (market_cap is None or market_cap <= 0) and nd and nd[3]:
         market_cap = int(nd[3])
+    # Final-fallback float estimate: implied shares from market cap
+    if (float_shares is None or float_shares <= 0) and market_cap and q.close and q.close > 0:
+        implied_shares = market_cap / q.close
+        float_shares = int(implied_shares * 0.70)
     if not summary and nd_desc:
         summary = nd_desc
 
