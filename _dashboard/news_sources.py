@@ -142,6 +142,77 @@ def fetch_yahoo_rss(ticker: str) -> list[dict]:
 
 
 # ============================================================
+# Finviz snapshot stats (Market Cap, Shs Float, Shs Outstand, ...)
+# ============================================================
+_FINVIZ_NUM_RE = re.compile(r"([\d.,]+)\s*([KMBT])?", re.I)
+
+
+def _parse_finviz_num(s: str | None) -> int | None:
+    if not s:
+        return None
+    s = s.strip()
+    if s in ("-", "—", ""):
+        return None
+    m = _FINVIZ_NUM_RE.match(s)
+    if not m:
+        return None
+    try:
+        n = float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+    mult = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}.get(
+        (m.group(2) or "").upper(), 1
+    )
+    return int(n * mult)
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_finviz_stats(ticker: str) -> dict:
+    """Scrape the Finviz snapshot-table-2 for fundamental stats.
+
+    Returns {market_cap, float_shares, shares_out} with integer values
+    where present, None when the cell was missing or unparseable.
+    """
+    try:
+        r = requests.get(
+            f"https://finviz.com/quote.ashx?t={ticker.upper()}",
+            headers=HEADERS, timeout=15,
+        )
+        if r.status_code != 200:
+            return {}
+        soup = BeautifulSoup(r.text, "lxml")
+    except Exception:
+        return {}
+
+    # Finviz has rotated this class a few times: snapshot-table2 /
+    # snapshot-table-2. Try both, then any table that contains
+    # 'Market Cap' as a label.
+    table = (soup.find("table", class_="snapshot-table2")
+             or soup.find("table", class_="snapshot-table-2"))
+    if table is None:
+        for t in soup.find_all("table"):
+            if t.find(string=lambda s: s and s.strip() == "Market Cap"):
+                table = t
+                break
+    if table is None:
+        return {}
+
+    pairs: dict[str, str] = {}
+    for tr in table.find_all("tr"):
+        cells = tr.find_all(["td", "th"])
+        for i in range(0, len(cells) - 1, 2):
+            label = cells[i].get_text(strip=True)
+            value = cells[i + 1].get_text(strip=True)
+            if label:
+                pairs[label] = value
+    return {
+        "market_cap":   _parse_finviz_num(pairs.get("Market Cap")),
+        "float_shares": _parse_finviz_num(pairs.get("Shs Float")),
+        "shares_out":   _parse_finviz_num(pairs.get("Shs Outstand")),
+    }
+
+
+# ============================================================
 # Combined index
 # ============================================================
 def combined_news_by_date(ticker: str) -> dict[date, list[dict]]:

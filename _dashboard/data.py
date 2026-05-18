@@ -7,7 +7,7 @@ returns rows grouped by category folder.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dc_replace
 from datetime import date, datetime, timedelta
 
 import re
@@ -587,17 +587,18 @@ def fetch_quotes(tickers: tuple[str, ...]) -> dict[str, Quote]:
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
-def nasdaq_price_map() -> dict[str, tuple[float, str, str]]:
-    """ticker -> (last_price, sector, industry) from the cached NASDAQ
-    screener. Used as a fallback when yfinance .info 401s and we have
-    no live close - we still want to surface the ticker if NASDAQ
-    last-saw it in the $1-$20 band."""
+def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None]]:
+    """ticker -> (last_price, sector, industry, market_cap).
+
+    Sourced from the cached NASDAQ screener (24h cache). Used as
+    fallback data when yfinance .info 401s on the .info endpoint.
+    """
     try:
-        from screener import fetch_nasdaq_universe, _parse_price
+        from screener import fetch_nasdaq_universe, _parse_price, _parse_marketcap
         raw = fetch_nasdaq_universe()
     except Exception:
         return {}
-    out: dict[str, tuple[float, str, str]] = {}
+    out: dict[str, tuple[float, str, str, float | None]] = {}
     for r in raw:
         sym = (r.get("symbol") or "").strip().upper()
         if not sym:
@@ -605,9 +606,61 @@ def nasdaq_price_map() -> dict[str, tuple[float, str, str]]:
         p = _parse_price(r.get("lastsale"))
         if p is None:
             continue
-        out[sym] = (p, (r.get("sector") or "").strip(),
-                       (r.get("industry") or "").strip())
+        mc = _parse_marketcap(r.get("marketCap"))
+        out[sym] = (
+            p,
+            (r.get("sector") or "").strip(),
+            (r.get("industry") or "").strip(),
+            mc,
+        )
     return out
+
+
+@st.cache_data(ttl=43_200, show_spinner=False)
+def _finviz_stats_batch(tickers: tuple[str, ...]) -> dict[str, dict]:
+    """Parallel Finviz snapshot-table scrape for a batch of tickers.
+    Returns ticker -> {market_cap, float_shares, shares_out}.
+    Cached 12h. Used to backfill float / market-cap when yfinance .info
+    doesn't return them (which is most of the time lately)."""
+    try:
+        from news_sources import fetch_finviz_stats
+    except Exception:
+        return {}
+    out: dict[str, dict] = {}
+    def _one(t: str):
+        try:
+            return t, fetch_finviz_stats(t)
+        except Exception:
+            return t, {}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for t, stats in pool.map(_one, tickers):
+            if stats:
+                out[t] = stats
+    return out
+
+
+def _enrich_with_fallbacks(
+    q: Quote,
+    nd: tuple[float, str, str, float | None] | None,
+    fv: dict | None,
+) -> Quote:
+    """Fill missing float / market_cap on a Quote from Finviz stats and
+    NASDAQ screener data."""
+    float_shares = q.float_shares
+    market_cap = q.market_cap
+    if (float_shares is None or float_shares <= 0) and fv:
+        fs = fv.get("float_shares")
+        if fs:
+            float_shares = fs
+    if (market_cap is None or market_cap <= 0) and fv:
+        mc = fv.get("market_cap")
+        if mc:
+            market_cap = mc
+    if (market_cap is None or market_cap <= 0) and nd and nd[3]:
+        market_cap = int(nd[3])
+    if float_shares == q.float_shares and market_cap == q.market_cap:
+        return q
+    return dc_replace(q, float_shares=float_shares, market_cap=market_cap)
 
 
 def filtered_by_category(
@@ -625,19 +678,18 @@ def filtered_by_category(
     quotes = fetch_quotes(tuple(sorted(ticker_list)))
     nd_prices = nasdaq_price_map()
     result: dict[str, list[Quote]] = {}
+    needs_fv: list[str] = []   # tickers missing float OR market_cap
+
     for folder, tickers in universe_dict.items():
         rows: list[Quote] = []
         for t in tickers:
             q = quotes.get(t)
             usable = q is not None and q.passes_filter()
             if not usable:
-                # yfinance had no data (or returned a price outside range).
-                # If NASDAQ last saw this ticker in range, synthesize a
-                # NASDAQ-sourced Quote so it still surfaces.
                 nd = nd_prices.get(t)
                 if nd is None:
                     continue
-                nd_price, nd_sector, nd_industry = nd
+                nd_price, nd_sector, nd_industry, nd_mc = nd
                 if not (MIN_PRICE <= nd_price <= MAX_PRICE):
                     continue
                 q = Quote(
@@ -645,15 +697,30 @@ def filtered_by_category(
                     price=nd_price,
                     previous_close=nd_price,
                     float_shares=None,
-                    market_cap=None,
+                    market_cap=int(nd_mc) if nd_mc else None,
                     sector=nd_sector,
                     industry=nd_industry,
                     name=t,
                     summary=None,
                 )
             rows.append(q)
+            if (q.float_shares is None or q.float_shares <= 0
+                    or q.market_cap is None or q.market_cap <= 0):
+                needs_fv.append(t)
         rows.sort(key=lambda q: (q.float_shares or 1e12))
         result[folder] = rows
+
+    # Backfill missing float / market_cap from Finviz snapshot stats
+    if needs_fv:
+        fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv))))
+        for folder, rows in result.items():
+            enriched: list[Quote] = []
+            for q in rows:
+                enriched.append(
+                    _enrich_with_fallbacks(q, nd_prices.get(q.ticker), fv_stats.get(q.ticker))
+                )
+            enriched.sort(key=lambda q: (q.float_shares or 1e12))
+            result[folder] = enriched
     return result
 
 
