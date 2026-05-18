@@ -47,6 +47,7 @@ import healthcare_svc_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 from aidan import audit_rows, QASuggestion
+import mia as mia_module
 
 ROOT = Path(__file__).parent
 
@@ -1016,6 +1017,145 @@ def render_aidan_qa() -> None:
 
 
 # =============================================================================
+# Mia — Performance Coach (reads Trading Journal)
+# =============================================================================
+_SEV_COLOR = {"high": DANGER, "medium": WARN, "low": GOOD}
+
+
+def render_mia_coach() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Mia / Coach</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Performance Review</div>
+        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
+          Mia reads your Trading Journal entries and surfaces leaks - where
+          you're consistently losing money, what's actually working, and
+          what to change next week.</div>""",
+        unsafe_allow_html=True,
+    )
+
+    trades = trading_journal.load_trades()
+    analysis = mia_module.analyze(trades)
+
+    if analysis.get("empty"):
+        st.info(
+            "No trades logged yet. Add some entries in the Trading Journal "
+            "and come back - Mia needs at least a handful of trades to spot "
+            "patterns (8-10 trades minimum is recommended)."
+        )
+        return
+
+    # ---- Top metrics ----
+    stats = trading_journal.calculate_stats(trades)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _stat_card("Total Trades", str(stats["total_trades"]), WHITE)
+    with c2:
+        col = GOOD if stats["win_rate"] >= 50 else DANGER
+        _stat_card("Win Rate", f"{stats['win_rate']:.1f}%", col)
+    with c3:
+        col = GOOD if stats["total_pnl"] >= 0 else DANGER
+        sign = "+" if stats["total_pnl"] >= 0 else ""
+        _stat_card("Total P&L", f"{sign}${stats['total_pnl']:,.0f}", col)
+    with c4:
+        ratio = (analysis["avg_win"] / abs(analysis["avg_loss"])
+                 if analysis["avg_win"] and analysis["avg_loss"] else 0)
+        col = GOOD if ratio >= 1.5 else (WARN if ratio >= 1.0 else DANGER)
+        _stat_card("Win:Loss $$", f"{ratio:.2f}:1", col)
+
+    # ---- Leak callouts ----
+    st.markdown(f"<div style='height:18px;'></div>", unsafe_allow_html=True)
+    leaks = mia_module.find_leaks(analysis)
+    st.markdown(
+        f"<div style='font-size:1.15rem;font-weight:700;color:{WHITE};"
+        f"margin:8px 0 12px;'>Mia's Observations ({len(leaks)})</div>",
+        unsafe_allow_html=True,
+    )
+    if not leaks:
+        st.info("No glaring leaks. Mia recommends keeping a tighter trade log "
+                "(setup tags, notes) so she can spot subtler patterns.")
+    for l in leaks:
+        col = _SEV_COLOR.get(l.severity, WHITE_MUTE)
+        st.markdown(
+            f"""<div style='border-left:4px solid {col};
+              background:{NAVY_CARD};border-radius:6px;
+              padding:12px 16px;margin-bottom:10px;'>
+              <div style='display:flex;justify-content:space-between;
+                align-items:center;margin-bottom:4px;'>
+                <span style='font-size:0.95rem;font-weight:700;
+                  color:{WHITE};'>{l.title}</span>
+                <span style='background:{col};color:#06121e;
+                  font-weight:700;font-size:0.7rem;padding:2px 8px;
+                  border-radius:4px;text-transform:uppercase;'>
+                  {l.severity}</span>
+              </div>
+              <div style='color:{WHITE_DIM};font-size:0.85rem;
+                margin-bottom:6px;'>{l.detail}</div>
+              <div style='color:{WHITE_MUTE};font-size:0.82rem;
+                line-height:1.4;'>
+                <strong style='color:{ACCENT};'>Recommendation:</strong>
+                {l.recommendation}</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    # ---- Bucket tables ----
+    def _render_bucket(title: str, buckets, label_header: str = "Bucket"):
+        if not buckets:
+            return
+        st.markdown(
+            f"<div style='font-size:1.05rem;font-weight:700;color:{WHITE};"
+            f"margin:18px 0 8px;'>{title}</div>",
+            unsafe_allow_html=True,
+        )
+        head_cells = "".join(
+            f"<th style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+            f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
+            f"text-align:{align};'>{h}</th>"
+            for h, align in [
+                (label_header, "left"), ("Trades", "right"),
+                ("Win Rate", "right"), ("Total P&L", "right"),
+                ("Avg P&L", "right"),
+            ]
+        )
+        body_rows = []
+        for s in buckets:
+            wr_col = GOOD if s.win_rate >= 50 else DANGER
+            pnl_col = GOOD if s.total_pnl >= 0 else DANGER
+            avg_col = GOOD if s.avg_pnl >= 0 else DANGER
+            body_rows.append(
+                f"<tr>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE};font-weight:500;'>{s.label}</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE_DIM};text-align:right;'>{s.trades}</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{wr_col};text-align:right;font-weight:600;'>{s.win_rate:.0f}%</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{pnl_col};text-align:right;font-weight:600;'>${s.total_pnl:,.0f}</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{avg_col};text-align:right;'>${s.avg_pnl:+,.0f}</td>"
+                f"</tr>"
+            )
+        st.markdown(
+            f"""<table class='sierra-table'>
+              <thead><tr>{head_cells}</tr></thead>
+              <tbody>{''.join(body_rows)}</tbody>
+            </table>""",
+            unsafe_allow_html=True,
+        )
+
+    _render_bucket("By Setup Tag",     analysis["by_tag"],       "Setup")
+    _render_bucket("By Day of Week",   analysis["by_dow"],       "Day")
+    _render_bucket("By Direction",     analysis["by_direction"], "Direction")
+    _render_bucket("By Ticker (top 20)", analysis["by_ticker"][:20], "Ticker")
+
+
+# =============================================================================
 # IPO calendar
 # =============================================================================
 SECTOR_BADGE_COLOR = {
@@ -1309,6 +1449,15 @@ def main() -> None:
                 st.session_state.view = "aidan"
                 st.rerun()
 
+            if st.button(
+                "💡 Mia (Performance Coach)",
+                use_container_width=True,
+                key="mia_btn",
+                type="primary" if st.session_state.view == "mia" else "secondary",
+            ):
+                st.session_state.view = "mia"
+                st.rerun()
+
     if is_journal:
         render_journal()
         return
@@ -1319,6 +1468,10 @@ def main() -> None:
 
     if st.session_state.view == "aidan":
         render_aidan_qa()
+        return
+
+    if st.session_state.view == "mia":
+        render_mia_coach()
         return
 
     if st.session_state.view == "ipo":
