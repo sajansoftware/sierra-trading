@@ -1026,19 +1026,6 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
     inject_theme()
-    # Visible top-of-page bar so the user can always tell where the
-    # sidebar is, even on Cloud where the native chevron blends in.
-    st.markdown(
-        f"""<div style='display:flex;align-items:center;gap:10px;
-            padding:4px 0 12px;font-size:0.85rem;color:{WHITE_MUTE};'>
-          <span style='background:{NAVY_CARD};border:1px solid {BORDER};
-            padding:6px 12px;border-radius:6px;color:{WHITE};
-            font-weight:600;'>☰ Menu →</span>
-          <span>Click the chevron in the top-left to expand / collapse
-          the sidebar (or press <code style='color:{WHITE};'>[</code>).</span>
-        </div>""",
-        unsafe_allow_html=True,
-    )
 
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
