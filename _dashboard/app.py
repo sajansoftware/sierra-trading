@@ -46,6 +46,7 @@ import real_estate_universe
 import healthcare_svc_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
+from aidan import audit_rows, QASuggestion
 
 ROOT = Path(__file__).parent
 
@@ -871,6 +872,150 @@ def render_top_movers() -> None:
 
 
 # =============================================================================
+# Aidan — catalyst-classifier QA agent
+# =============================================================================
+def render_aidan_qa() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Aidan / QA</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Classifier QA Audit</div>
+        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
+          Aidan scans every passing ticker's catalyst headlines, finds rows
+          labeled 'No news' that contain biotech / corporate signal words,
+          and proposes the catalyst type plus the keyword to add to the
+          classifier.</div>""",
+        unsafe_allow_html=True,
+    )
+
+    # Pool of tickers = every passing ticker across all sectors
+    pool: set[str] = set()
+    for mod in (bio_universe, tech_universe, energy_universe,
+                industrials_universe, materials_universe,
+                consumer_disc_universe, financials_universe,
+                comm_services_universe, consumer_staples_universe,
+                real_estate_universe, healthcare_svc_universe):
+        try:
+            pool.update(mod.all_tickers())
+        except Exception:
+            continue
+    pool = sorted(pool)
+
+    max_tickers = st.slider(
+        "Tickers to scan (caps the audit so it finishes in reasonable time)",
+        min_value=20, max_value=300, value=80, step=20,
+    )
+    pool = pool[:max_tickers]
+
+    suggestions: list[QASuggestion] = []
+    n_no_news = 0
+    n_rows = 0
+    with st.spinner(f"Aidan auditing {len(pool)} tickers…"):
+        for tkr in pool:
+            try:
+                rows = fetch_premarket_catalysts(tkr)
+            except Exception:
+                continue
+            n_rows += len(rows)
+            n_no_news += sum(1 for r in rows if r.get("type") == "No news")
+            suggestions.extend(audit_rows(rows, tkr))
+
+    # Summary
+    cov_pct = 100 * (1 - n_no_news / n_rows) if n_rows else 0
+    st.markdown(
+        f"""<div style="display:flex;gap:24px;margin-bottom:18px;">
+          <span style="color:{WHITE};font-weight:600;">Tickers scanned: {len(pool)}</span>
+          <span style="color:{WHITE_DIM};">Catalyst rows: {n_rows}</span>
+          <span style="color:{WHITE_DIM};">Currently 'No news': {n_no_news}</span>
+          <span style="color:{GOOD};">Classifier coverage: {cov_pct:.1f}%</span>
+          <span style="color:{WARN};">Aidan suggestions: {len(suggestions)}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if not suggestions:
+        st.info(
+            "No misclassified rows found in the scanned tickers. Bump the "
+            "ticker count slider to audit more of the universe."
+        )
+        return
+
+    # Group suggestions by proposed type
+    by_type: dict[str, list[QASuggestion]] = {}
+    for s in suggestions:
+        by_type.setdefault(s.suggested_type, []).append(s)
+
+    for stype in sorted(by_type.keys(), key=lambda k: -len(by_type[k])):
+        items = by_type[stype]
+        type_col = CATALYST_TYPE_COLOR.get(stype, WHITE_MUTE)
+        st.markdown(
+            f"""<div style="margin:18px 0 8px;display:flex;
+              align-items:center;gap:10px;">
+              <span style="background:{type_col};color:#06121e;
+                font-weight:700;font-size:0.78rem;padding:3px 10px;
+                border-radius:4px;">{stype}</span>
+              <span style="color:{WHITE_MUTE};font-size:0.8rem;">
+                {len(items)} headline(s) Aidan would reclassify here</span>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        head_cells = "".join(
+            f"<th style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+            f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+            f"text-align:{align};'>{h}</th>"
+            for h, align in [
+                ("Ticker","left"), ("Date","left"), ("Headline","left"),
+                ("Matched phrase","left"), ("Source","center"),
+            ]
+        )
+        body_rows = []
+        for s in items[:30]:    # cap per group for readability
+            body_rows.append(
+                f"<tr>"
+                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE};font-weight:600;'>{s.ticker}</td>"
+                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE_DIM};font-size:0.82rem;white-space:nowrap;'>{s.date}</td>"
+                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE_DIM};font-size:0.82rem;max-width:520px;'>{s.headline}</td>"
+                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{ACCENT};font-size:0.78rem;font-style:italic;'>"
+                f"\"{s.matched_phrase}\"</td>"
+                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
+                f"color:{WHITE_MUTE};font-size:0.78rem;text-align:center;'>"
+                f"{s.source}</td>"
+                f"</tr>"
+            )
+        st.markdown(
+            f"""<table class='sierra-table'>
+              <thead><tr>{head_cells}</tr></thead>
+              <tbody>{''.join(body_rows)}</tbody>
+            </table>""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f"""<div style="margin-top:24px;padding:14px 18px;
+          background:{NAVY_CARD};border:1px solid {BORDER};
+          border-radius:6px;">
+          <div style="color:{WHITE};font-weight:600;margin-bottom:6px;">
+            How to apply Aidan's suggestions</div>
+          <div style="color:{WHITE_DIM};font-size:0.85rem;line-height:1.5;">
+            Open <code style="color:{ACCENT};">_dashboard/data.py</code>,
+            find the <code style="color:{ACCENT};">CATALYST_KEYWORDS</code>
+            list, and append each <em>matched phrase</em> above to its
+            suggested type. Restart the dashboard - the previously
+            'No news' rows reclassify on the next catalyst-dialog open.
+          </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
 # IPO calendar
 # =============================================================================
 SECTOR_BADGE_COLOR = {
@@ -1129,6 +1274,15 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
+                "🔍 Aidan QA",
+                use_container_width=True,
+                key="aidan_btn",
+                type="primary" if st.session_state.view == "aidan" else "secondary",
+            ):
+                st.session_state.view = "aidan"
+                st.rerun()
+
+            if st.button(
                 "📅 IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
@@ -1151,6 +1305,10 @@ def main() -> None:
 
     if st.session_state.view == "movers":
         render_top_movers()
+        return
+
+    if st.session_state.view == "aidan":
+        render_aidan_qa()
         return
 
     if st.session_state.view == "ipo":
