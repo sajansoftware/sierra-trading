@@ -166,13 +166,54 @@ def _parse_finviz_num(s: str | None) -> int | None:
     return int(n * mult)
 
 
+import json
+import time as _time
+from pathlib import Path as _Path
+
+_FINVIZ_DISK_CACHE = _Path(__file__).parent / ".finviz_stats_cache.json"
+_FINVIZ_DISK_TTL = 7 * 86_400          # 7 days per entry
+_finviz_disk_mem: dict | None = None   # in-process load cache
+
+
+def _load_finviz_disk() -> dict:
+    global _finviz_disk_mem
+    if _finviz_disk_mem is not None:
+        return _finviz_disk_mem
+    if _FINVIZ_DISK_CACHE.exists():
+        try:
+            _finviz_disk_mem = json.loads(_FINVIZ_DISK_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            _finviz_disk_mem = {}
+    else:
+        _finviz_disk_mem = {}
+    return _finviz_disk_mem
+
+
+def _save_finviz_disk(data: dict) -> None:
+    try:
+        _FINVIZ_DISK_CACHE.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+
+
 @st.cache_data(ttl=86_400, show_spinner=False)
 def fetch_finviz_stats(ticker: str) -> dict:
     """Scrape the Finviz snapshot-table-2 for fundamental stats.
 
+    Two-tier cache:
+      - Disk: 7 days per ticker, survives Streamlit restarts and
+        accumulates as the dashboard runs. Eliminates cold-start
+        Finviz rate-limit pain.
+      - Streamlit @cache_data: 24h in-process layer on top.
+
     Returns {market_cap, float_shares, shares_out} with integer values
     where present, None when the cell was missing or unparseable.
     """
+    disk = _load_finviz_disk()
+    entry = disk.get(ticker.upper())
+    if entry and (_time.time() - entry.get("_t", 0)) < _FINVIZ_DISK_TTL:
+        return {k: v for k, v in entry.items() if not k.startswith("_")}
+
     try:
         r = requests.get(
             f"https://finviz.com/quote.ashx?t={ticker.upper()}",
@@ -205,11 +246,16 @@ def fetch_finviz_stats(ticker: str) -> dict:
             value = cells[i + 1].get_text(strip=True)
             if label:
                 pairs[label] = value
-    return {
+    result = {
         "market_cap":   _parse_finviz_num(pairs.get("Market Cap")),
         "float_shares": _parse_finviz_num(pairs.get("Shs Float")),
         "shares_out":   _parse_finviz_num(pairs.get("Shs Outstand")),
     }
+    # Write back to disk cache if we got at least one useful value
+    if any(v is not None for v in result.values()):
+        disk[ticker.upper()] = {**result, "_t": _time.time()}
+        _save_finviz_disk(disk)
+    return result
 
 
 # ============================================================

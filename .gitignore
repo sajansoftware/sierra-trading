@@ -8,3 +8,4 @@ venv/
 .DS_Store
 .claude/
 _dashboard/journal_data.json
+_dashboard/.finviz_stats_cache.json
