@@ -424,25 +424,39 @@ def style_table(df: pd.DataFrame):
 # Catalyst modal (native dialog — has built-in close X)
 # =============================================================================
 CATALYST_TYPE_COLOR = {
-    "FDA Approval":   "#22c55e",
-    "PDUFA":          "#22c55e",
-    "Clinical Data":  "#06b6d4",
-    "Trial Update":   "#06b6d4",
-    "Product Launch": "#10b981",
-    "Earnings":       "#a78bfa",
-    "Offering":       "#f97316",
-    "M&A":            "#facc15",
-    "Partnership":    "#64b5f6",
-    "Contract Win":   "#34d399",
-    "Listing":        "#64b5f6",
-    "Guidance":       "#a78bfa",
-    "Patent":         "#94a3b8",
-    "Insider":        "#94a3b8",
-    "Analyst":        "#94a3b8",
-    "Restructuring":  "#f97316",
-    "Bankruptcy":     "#ef4444",
-    "Auditor":        "#94a3b8",
-    "News":           "#94a3b8",
+    # Bullish (green family)
+    "FDA Approval":     "#22c55e",
+    "PDUFA":            "#22c55e",
+    "IND Clearance":    "#22c55e",
+    "NDA / BLA":        "#10b981",
+    "Designation":      "#10b981",
+    "Product Launch":   "#10b981",
+    "Contract Win":     "#34d399",
+    "Buyout / Rumor":   "#facc15",
+    "M&A":              "#facc15",
+    "Insider Buy":      "#22c55e",
+    "Institutional Buy":"#34d399",
+    # Mixed / depends on result (cyan / blue family)
+    "Clinical Data":    "#06b6d4",
+    "Trial Enrollment": "#06b6d4",
+    "Conference":       "#06b6d4",
+    "Partnership":      "#64b5f6",
+    "Listing":          "#64b5f6",
+    # Neutral / structural (violet / muted)
+    "Earnings":         "#a78bfa",
+    "Cash Runway":      "#a78bfa",
+    "Guidance":         "#a78bfa",
+    "Patent":           "#94a3b8",
+    "Analyst":          "#94a3b8",
+    "News":             "#94a3b8",
+    # Bearish-leaning (orange / red)
+    "Offering":         "#f97316",
+    "Private Placement":"#f97316",
+    "Reverse Split":    "#f97316",
+    "CRL":              "#ef4444",
+    "Bankruptcy":       "#ef4444",
+    "Restructuring":    "#f97316",
+    "Auditor":          "#94a3b8",
 }
 
 
@@ -475,6 +489,25 @@ def catalyst_dialog(ticker: str) -> None:
             "(close $1–$20, PM upside ≥ 30%)."
         )
         if st.button("Close", key="close_empty"):
+            _close_dialog()
+            st.rerun()
+        return
+
+    # Type filter populated from the actual rows present
+    types_present = sorted({r["type"] for r in rows})
+    selected_types = st.multiselect(
+        "Filter by catalyst type",
+        options=types_present,
+        default=types_present,
+        key=f"type_filter_{ticker}",
+        label_visibility="collapsed",
+        placeholder="Filter by catalyst type…",
+    )
+    if selected_types and len(selected_types) < len(types_present):
+        rows = [r for r in rows if r["type"] in selected_types]
+    if not rows:
+        st.info("No rows match the selected catalyst types.")
+        if st.button("Close", key="close_filt_empty"):
             _close_dialog()
             st.rerun()
         return
