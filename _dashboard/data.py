@@ -669,24 +669,23 @@ def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None]]:
 
 @st.cache_data(ttl=43_200, show_spinner=False)
 def _finviz_stats_batch(tickers: tuple[str, ...]) -> dict[str, dict]:
-    """Parallel Finviz snapshot-table scrape for a batch of tickers.
-    Returns ticker -> {market_cap, float_shares, shares_out}.
-    Cached 12h. Used to backfill float / market-cap when yfinance .info
-    doesn't return them (which is most of the time lately)."""
+    """Read Finviz stats from the DISK CACHE ONLY. Instant.
+
+    No live HTTP for the broad sector load - Finviz rate-limits at
+    scale so a 3000-ticker live scrape would hang. Tickers not yet
+    in the disk cache fall through to the implied-shares estimate.
+    Live Finviz scrapes still happen via per-ticker contexts (catalyst
+    dialog) and on the prewarm_finviz.py script.
+    """
     try:
-        from news_sources import fetch_finviz_stats
+        from news_sources import fetch_finviz_stats_cached_only
     except Exception:
         return {}
     out: dict[str, dict] = {}
-    def _one(t: str):
-        try:
-            return t, fetch_finviz_stats(t)
-        except Exception:
-            return t, {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        for t, stats in pool.map(_one, tickers):
-            if stats:
-                out[t] = stats
+    for t in tickers:
+        stats = fetch_finviz_stats_cached_only(t)
+        if stats:
+            out[t] = stats
     return out
 
 

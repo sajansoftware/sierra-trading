@@ -196,6 +196,21 @@ def _save_finviz_disk(data: dict) -> None:
         pass
 
 
+def fetch_finviz_stats_cached_only(ticker: str) -> dict:
+    """Read from disk cache only. No HTTP. Returns {} if not cached.
+
+    Used by the broad sector-load path where live-scraping 3000+
+    tickers would hang on Finviz rate-limits. Live scrapes still
+    happen via fetch_finviz_stats() from per-ticker contexts (the
+    catalyst dialog).
+    """
+    disk = _load_finviz_disk()
+    entry = disk.get(ticker.upper())
+    if entry and (_time.time() - entry.get("_t", 0)) < _FINVIZ_DISK_TTL:
+        return {k: v for k, v in entry.items() if not k.startswith("_")}
+    return {}
+
+
 @st.cache_data(ttl=86_400, show_spinner=False)
 def fetch_finviz_stats(ticker: str) -> dict:
     """Scrape the Finviz snapshot-table-2 for fundamental stats.
