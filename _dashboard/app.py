@@ -37,6 +37,9 @@ import universe as bio_universe
 import tech_universe
 import energy_universe
 import industrials_universe
+import materials_universe
+import consumer_disc_universe
+import financials_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 
@@ -90,6 +93,36 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Construction_Engineering": ("Construction & Engineering", ACCENT, ROOT / "Industrials" / "Construction_Engineering"),
         "Electrical_Equipment":     ("Electrical Equipment",       ACCENT, ROOT / "Industrials" / "Electrical_Equipment"),
         "Industrial_Services":      ("Industrial Services",        ACCENT, ROOT / "Industrials" / "Industrial_Services"),
+    },
+    "Materials": {
+        "Precious_Metals":          ("Precious Metals",            ACCENT, ROOT / "Materials" / "Precious_Metals"),
+        "Battery_Critical_Metals":  ("Battery & Critical Metals",  ACCENT, ROOT / "Materials" / "Battery_Critical_Metals"),
+        "Rare_Earth_Strategic":     ("Rare Earth & Strategic",     ACCENT, ROOT / "Materials" / "Rare_Earth_Strategic"),
+        "Uranium":                  ("Uranium",                    ACCENT, ROOT / "Materials" / "Uranium"),
+        "Base_Metals":              ("Base Metals",                ACCENT, ROOT / "Materials" / "Base_Metals"),
+        "Steel_Iron":               ("Steel & Iron",               ACCENT, ROOT / "Materials" / "Steel_Iron"),
+        "Specialty_Chemicals":      ("Specialty Chemicals",        ACCENT, ROOT / "Materials" / "Specialty_Chemicals"),
+        "Construction_Materials":   ("Construction Materials",     ACCENT, ROOT / "Materials" / "Construction_Materials"),
+    },
+    "Consumer Discretionary": {
+        "Retail_Specialty":         ("Retail & Specialty Stores",  ACCENT, ROOT / "Consumer_Discretionary" / "Retail_Specialty"),
+        "Apparel_Footwear":         ("Apparel & Footwear",         ACCENT, ROOT / "Consumer_Discretionary" / "Apparel_Footwear"),
+        "Automotive_EVs":           ("Automotive & EVs",           ACCENT, ROOT / "Consumer_Discretionary" / "Automotive_EVs"),
+        "Restaurants_Hospitality":  ("Restaurants & Hospitality",  ACCENT, ROOT / "Consumer_Discretionary" / "Restaurants_Hospitality"),
+        "Travel_Leisure":           ("Travel & Leisure",           ACCENT, ROOT / "Consumer_Discretionary" / "Travel_Leisure"),
+        "Gaming_Entertainment":     ("Gaming & Entertainment",     ACCENT, ROOT / "Consumer_Discretionary" / "Gaming_Entertainment"),
+        "Home_Garden":              ("Home & Garden",              ACCENT, ROOT / "Consumer_Discretionary" / "Home_Garden"),
+        "E_commerce":               ("E-commerce",                 ACCENT, ROOT / "Consumer_Discretionary" / "E_commerce"),
+    },
+    "Financials": {
+        "Regional_Banks":           ("Regional Banks",             ACCENT, ROOT / "Financials" / "Regional_Banks"),
+        "Investment_Banks_Brokers": ("Investment Banks & Brokers", ACCENT, ROOT / "Financials" / "Investment_Banks_Brokers"),
+        "Asset_Management":         ("Asset Management",           ACCENT, ROOT / "Financials" / "Asset_Management"),
+        "Insurance":                ("Insurance",                  ACCENT, ROOT / "Financials" / "Insurance"),
+        "Fintech_Payments":         ("Fintech & Payments",         ACCENT, ROOT / "Financials" / "Fintech_Payments"),
+        "BDCs":                     ("BDCs",                       ACCENT, ROOT / "Financials" / "BDCs"),
+        "Specialty_Finance":        ("Specialty Finance",          ACCENT, ROOT / "Financials" / "Specialty_Finance"),
+        "Crypto_Adjacent":          ("Crypto-Adjacent",            ACCENT, ROOT / "Financials" / "Crypto_Adjacent"),
     },
 }
 
@@ -663,13 +696,19 @@ def render_top_movers() -> None:
         unsafe_allow_html=True,
     )
 
-    # Pool of tickers = every curated INFO across sectors
+    # Pool of tickers = every ticker the dashboard knows about (curated +
+    # screener-discovered) across all sectors.
     pool: set[str] = set()
-    for mod in (bio_universe, tech_universe, energy_universe, industrials_universe):
+    for mod in (bio_universe, tech_universe, energy_universe,
+                industrials_universe, materials_universe,
+                consumer_disc_universe, financials_universe):
         try:
-            pool.update(mod.INFO.keys())
+            pool.update(mod.all_tickers())
         except Exception:
-            continue
+            try:
+                pool.update(mod.INFO.keys())
+            except Exception:
+                continue
 
     with st.spinner("Scanning today's tape…"):
         movers = fetch_top_movers(tuple(sorted(pool)))
@@ -1033,10 +1072,13 @@ def main() -> None:
         return
 
     uni_mod = {
-        "Biotechnology": bio_universe,
-        "Technology":    tech_universe,
-        "Energy":        energy_universe,
-        "Industrials":   industrials_universe,
+        "Biotechnology":          bio_universe,
+        "Technology":             tech_universe,
+        "Energy":                  energy_universe,
+        "Industrials":            industrials_universe,
+        "Materials":              materials_universe,
+        "Consumer Discretionary": consumer_disc_universe,
+        "Financials":             financials_universe,
     }[main_cat]
 
     ticker_count = f"{len(uni_mod.INFO)} curated"

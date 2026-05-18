@@ -168,3 +168,119 @@ def biotech_candidates(
 
 def candidate_symbols(rows: Iterable[dict]) -> list[str]:
     return [r["symbol"] for r in rows]
+
+
+# =============================================================================
+# Cross-sector classifier: NASDAQ industry -> (sector, sub_sector)
+# =============================================================================
+# Sector keys match the SECTORS dict in app.py
+SECTOR_BIOTECH    = "Biotechnology"
+SECTOR_TECH       = "Technology"
+SECTOR_ENERGY     = "Energy"
+SECTOR_INDUSTRIAL = "Industrials"
+SECTOR_MATERIALS  = "Materials"
+SECTOR_CONSUMER_D = "Consumer_Discretionary"
+SECTOR_FINANCIALS = "Financials"
+
+# Map: NASDAQ industry string -> (sector_key, sub_sector_folder)
+# Comprehensive mapping built from observed NASDAQ industry vocabulary.
+INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
+    # ---------- Materials ----------
+    "Precious Metals":                         (SECTOR_MATERIALS, "Precious_Metals"),
+    "Metal Mining":                            (SECTOR_MATERIALS, "Base_Metals"),
+    "Mining & Quarrying of Nonmetallic Minerals (No Fuels)": (SECTOR_MATERIALS, "Base_Metals"),
+    "Major Chemicals":                         (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Specialty Chemicals":                     (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Industrial Specialties":                  (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Steel/Iron Ore":                          (SECTOR_MATERIALS, "Steel_Iron"),
+    "Aluminum":                                (SECTOR_MATERIALS, "Base_Metals"),
+    "Containers/Packaging":                    (SECTOR_MATERIALS, "Construction_Materials"),
+    "Building Materials":                      (SECTOR_MATERIALS, "Construction_Materials"),
+    "Forest Products":                         (SECTOR_MATERIALS, "Construction_Materials"),
+    # ---------- Consumer Discretionary ----------
+    "Apparel":                                 (SECTOR_CONSUMER_D, "Apparel_Footwear"),
+    "Clothing/Shoe/Accessory Stores":          (SECTOR_CONSUMER_D, "Apparel_Footwear"),
+    "Auto Manufacturing":                      (SECTOR_CONSUMER_D, "Automotive_EVs"),
+    "Auto Parts:O.E.M.":                       (SECTOR_CONSUMER_D, "Automotive_EVs"),
+    "Automotive Aftermarket":                  (SECTOR_CONSUMER_D, "Automotive_EVs"),
+    "Motor Vehicles":                          (SECTOR_CONSUMER_D, "Automotive_EVs"),
+    "Restaurants":                             (SECTOR_CONSUMER_D, "Restaurants_Hospitality"),
+    "Hotels/Resorts":                          (SECTOR_CONSUMER_D, "Restaurants_Hospitality"),
+    "Other Specialty Stores":                  (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Department/Specialty Retail Stores":      (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Catalog/Specialty Distribution":          (SECTOR_CONSUMER_D, "E_commerce"),
+    "RETAIL: Building Materials":              (SECTOR_CONSUMER_D, "Home_Garden"),
+    "Home Furnishings":                        (SECTOR_CONSUMER_D, "Home_Garden"),
+    "Consumer Specialties":                    (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Recreational Products/Toys":              (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
+    "Movies/Entertainment":                    (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
+    "Services-Misc. Amusement & Recreation":   (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
+    "Other Consumer Services":                 (SECTOR_CONSUMER_D, "Travel_Leisure"),
+    "Air Freight/Delivery Services":           (SECTOR_CONSUMER_D, "Travel_Leisure"),
+    # ---------- Financials ----------
+    "Major Banks":                             (SECTOR_FINANCIALS, "Regional_Banks"),
+    "Banks":                                   (SECTOR_FINANCIALS, "Regional_Banks"),
+    "Savings Institutions":                    (SECTOR_FINANCIALS, "Regional_Banks"),
+    "Commercial Banks":                        (SECTOR_FINANCIALS, "Regional_Banks"),
+    "Investment Bankers/Brokers/Service":      (SECTOR_FINANCIALS, "Investment_Banks_Brokers"),
+    "Investment Managers":                     (SECTOR_FINANCIALS, "Asset_Management"),
+    "Finance/Investors Services":              (SECTOR_FINANCIALS, "Asset_Management"),
+    "Life Insurance":                          (SECTOR_FINANCIALS, "Insurance"),
+    "Property-Casualty Insurers":              (SECTOR_FINANCIALS, "Insurance"),
+    "Specialty Insurers":                      (SECTOR_FINANCIALS, "Insurance"),
+    "Diversified Financial Services":          (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Finance: Consumer Services":              (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Finance Companies":                       (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Business Services":                       (SECTOR_FINANCIALS, "Fintech_Payments"),
+}
+
+# Keywords that nudge a ticker into Crypto-Adjacent sub-sector of Financials
+_CRYPTO_KEYWORDS = re.compile(
+    r"\b(bitcoin|crypto|blockchain|digital asset|web3|mining (?:rig|hardware))\b",
+    re.IGNORECASE,
+)
+
+
+def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
+    """Return (sector_key, sub_sector_folder) for a NASDAQ screener row.
+    None means the ticker doesn't fit any extended-screener sector
+    (e.g. Healthcare/Tech/Energy/Industrials are handled by their own
+    sector modules, not by this cross-sector classifier).
+    """
+    industry = (row.get("industry") or "").strip()
+    name = row.get("name") or ""
+
+    mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
+    if mapped is None:
+        return None
+
+    sector, sub = mapped
+    # Crypto-adjacent override in Financials
+    if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
+        sub = "Crypto_Adjacent"
+    return sector, sub
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def discover_by_sector(
+    target_sector: str,
+    min_price: float = 1.0,
+    max_price: float = 20.0,
+) -> dict[str, list[str]]:
+    """Pull all NASDAQ tickers $1-$20 that classify to target_sector.
+    Returns {sub_sector_folder: [tickers]}."""
+    raw = fetch_nasdaq_universe()
+    out: dict[str, list[str]] = {}
+    for r in raw:
+        sym = (r.get("symbol") or "").strip()
+        if not sym or any(c in sym for c in ".^$/"):
+            continue
+        price = _parse_price(r.get("lastsale"))
+        if price is None or not (min_price <= price <= max_price):
+            continue
+        cls = classify_ticker_sector(r)
+        if cls is None or cls[0] != target_sector:
+            continue
+        _, sub = cls
+        out.setdefault(sub, []).append(sym)
+    return out
