@@ -626,8 +626,10 @@ def catalyst_dialog(ticker: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # 3-source category verification (yfinance + NASDAQ official + company website)
-    _render_verification_section(ticker)
+    # 3-source category verification - LAZY. Shows only when the user
+    # opts in, so the dialog itself opens instantly.
+    if st.toggle("Show 3-source category verification", key="show_verify"):
+        _render_verification_section(ticker)
 
     if st.button("Close", key="close_dlg"):
         _close_dialog()
@@ -1126,6 +1128,14 @@ def main() -> None:
         st.session_state.selected_ticker = qp_ticker.strip().upper()
         st.query_params.clear()
 
+    # Open the catalyst dialog FIRST (before any sector loading) so the
+    # popup appears immediately on ticker click. Single-shot consume:
+    # subsequent reruns see None and let Streamlit dismiss the dialog.
+    pending_dialog = st.session_state.selected_ticker
+    if pending_dialog:
+        st.session_state.selected_ticker = None
+        catalyst_dialog(pending_dialog)
+
     def _reset_view():
         st.session_state.view = "sector"
 
@@ -1200,11 +1210,6 @@ def main() -> None:
 
     if st.session_state.view == "movers":
         render_top_movers()
-        # Catalyst dialog should still work from the movers table
-        pending = st.session_state.selected_ticker
-        if pending:
-            st.session_state.selected_ticker = None
-            catalyst_dialog(pending)
         return
 
     if st.session_state.view == "ipo":
@@ -1245,14 +1250,6 @@ def main() -> None:
         by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
-
-    # Single-shot dialog open: consume selected_ticker BEFORE calling the
-    # dialog. Any subsequent rerun (sub-sector click, X close, etc.) will
-    # see None and skip the call, so the dialog dismisses naturally.
-    pending = st.session_state.selected_ticker
-    if pending:
-        st.session_state.selected_ticker = None
-        catalyst_dialog(pending)
 
 
 if __name__ == "__main__":

@@ -639,28 +639,76 @@ def _finviz_stats_batch(tickers: tuple[str, ...]) -> dict[str, dict]:
     return out
 
 
+@st.cache_data(ttl=86_400, show_spinner=False)
+def _nasdaq_descriptions_batch(tickers: tuple[str, ...]) -> dict[str, str]:
+    """Parallel NASDAQ company-profile fetch for company descriptions.
+    Returns ticker -> first sentence of the company description.
+    Cached 24h."""
+    try:
+        from verifier import _nasdaq_profile_raw, _short_sentence
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    def _one(t: str):
+        try:
+            raw = _nasdaq_profile_raw(t)
+            data = (raw.get("data") or {}) if isinstance(raw, dict) else {}
+            for k in ("CompanyDescription", "companyDescription",
+                      "Description", "description", "BusinessDescription"):
+                v = data.get(k)
+                if isinstance(v, dict):
+                    v = v.get("value") or v.get("text") or ""
+                if v:
+                    return t, _short_sentence(str(v).strip(), max_chars=220)
+            return t, ""
+        except Exception:
+            return t, ""
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for t, desc in pool.map(_one, tickers):
+            if desc:
+                out[t] = desc
+    return out
+
+
 def _enrich_with_fallbacks(
     q: Quote,
     nd: tuple[float, str, str, float | None] | None,
     fv: dict | None,
+    nd_desc: str | None,
 ) -> Quote:
-    """Fill missing float / market_cap on a Quote from Finviz stats and
-    NASDAQ screener data."""
+    """Fill missing float / market_cap / summary on a Quote from Finviz
+    snapshot stats, NASDAQ screener seed, and NASDAQ profile description."""
     float_shares = q.float_shares
     market_cap = q.market_cap
+    summary = q.summary
+
     if (float_shares is None or float_shares <= 0) and fv:
         fs = fv.get("float_shares")
         if fs:
             float_shares = fs
+        else:
+            # Last-resort estimate: 70% of shares outstanding when float
+            # is unreported (typical low-insider micro-cap heuristic).
+            so = fv.get("shares_out")
+            if so:
+                float_shares = int(so * 0.70)
     if (market_cap is None or market_cap <= 0) and fv:
         mc = fv.get("market_cap")
         if mc:
             market_cap = mc
     if (market_cap is None or market_cap <= 0) and nd and nd[3]:
         market_cap = int(nd[3])
-    if float_shares == q.float_shares and market_cap == q.market_cap:
+    if not summary and nd_desc:
+        summary = nd_desc
+
+    if (float_shares == q.float_shares
+            and market_cap == q.market_cap
+            and summary == q.summary):
         return q
-    return dc_replace(q, float_shares=float_shares, market_cap=market_cap)
+    return dc_replace(q,
+                      float_shares=float_shares,
+                      market_cap=market_cap,
+                      summary=summary)
 
 
 def filtered_by_category(
@@ -710,17 +758,27 @@ def filtered_by_category(
         rows.sort(key=lambda q: (q.float_shares or 1e12))
         result[folder] = rows
 
-    # Backfill missing float / market_cap from Finviz snapshot stats
-    if needs_fv:
-        fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv))))
-        for folder, rows in result.items():
-            enriched: list[Quote] = []
-            for q in rows:
-                enriched.append(
-                    _enrich_with_fallbacks(q, nd_prices.get(q.ticker), fv_stats.get(q.ticker))
+    # Backfill missing float / market_cap from Finviz, and missing
+    # company descriptions from the NASDAQ company-profile API.
+    needs_desc = [
+        q.ticker for rows in result.values() for q in rows if not q.summary
+    ]
+    fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv)))) if needs_fv else {}
+    nd_descs = _nasdaq_descriptions_batch(tuple(sorted(set(needs_desc)))) if needs_desc else {}
+
+    for folder, rows in result.items():
+        enriched: list[Quote] = []
+        for q in rows:
+            enriched.append(
+                _enrich_with_fallbacks(
+                    q,
+                    nd_prices.get(q.ticker),
+                    fv_stats.get(q.ticker),
+                    nd_descs.get(q.ticker),
                 )
-            enriched.sort(key=lambda q: (q.float_shares or 1e12))
-            result[folder] = enriched
+            )
+        enriched.sort(key=lambda q: (q.float_shares or 1e12))
+        result[folder] = enriched
     return result
 
 
