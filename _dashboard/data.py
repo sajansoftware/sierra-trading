@@ -392,12 +392,25 @@ def fetch_premarket_catalysts(
             pm_high_ts = day_bars["High"].idxmax()
         except Exception:
             continue
-        # Price at 7:00 AM ET (or the nearest bar within 7:00-7:09).
+        # Price at 7:00 AM ET. Try the exact 7:00 bar first, then widen
+        # the window so every catalyst row gets a price even when the
+        # ticker had sparse pre-market activity at that exact minute.
         price_at_7am = None
         try:
-            seven_bars = day_bars.between_time("07:00", "07:09")
-            if not seven_bars.empty:
-                price_at_7am = float(seven_bars.iloc[0]["Close"])
+            for window in (("07:00", "07:04"), ("07:00", "07:14"),
+                           ("07:00", "07:29"), ("06:30", "07:59")):
+                w = day_bars.between_time(window[0], window[1])
+                if not w.empty:
+                    # Bar whose START is closest to 7:00 ET
+                    seven_target = w.index[0].replace(hour=7, minute=0, second=0)
+                    nearest_idx = (w.index - seven_target).map(abs).argmin()
+                    price_at_7am = float(w.iloc[nearest_idx]["Close"])
+                    break
+            # Last resort: nearest bar to 7:00 across the entire PM window
+            if price_at_7am is None and not day_bars.empty:
+                seven_target = day_bars.index[0].replace(hour=7, minute=0, second=0)
+                nearest_idx = (day_bars.index - seven_target).map(abs).argmin()
+                price_at_7am = float(day_bars.iloc[nearest_idx]["Close"])
         except Exception:
             pass
         pc = prior_close(d)
