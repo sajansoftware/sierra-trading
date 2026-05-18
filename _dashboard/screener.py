@@ -371,10 +371,11 @@ def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
             sub = "Crypto_Adjacent"
         return sector, sub
 
-    # Fallback: route to the NASDAQ-declared sector's 'Other' bucket
-    fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str)
-    if fallback_sector is None:
-        return None
+    # Fallback: route to the NASDAQ-declared sector's 'Other' bucket.
+    # Final fallback: tickers with no sector at all (SPACs, brand-new
+    # IPOs, ETFs) go to Industrials/Other so they still surface as long
+    # as they pass the $1-$20 + float<20M criteria.
+    fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str) or SECTOR_INDUSTRIAL
     if fallback_sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
         return SECTOR_FINANCIALS, "Crypto_Adjacent"
     return fallback_sector, "Other"
