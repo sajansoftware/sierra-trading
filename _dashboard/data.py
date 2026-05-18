@@ -836,20 +836,18 @@ def _filtered_by_category_impl(
             summary=None,
         )
 
-    # FAST PATH: NASDAQ-only. Float = mcap / close * 0.70
-    # (implied-shares estimate). NASDAQ gives us both numbers from
-    # cached snapshot, so no per-ticker network call is needed.
-    # Result: sub-second cold load on any sector.
-    #
-    # Finviz used to refine float here but scraping 3000+ tickers was
-    # minutes of cold-cache pain. Real Finviz numbers still hit the
-    # disk cache when the catalyst dialog or any per-ticker path fires;
-    # over time the disk cache accumulates without blocking page loads.
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
+
     enriched_pass: dict[str, Quote] = {}
     for t, seed in seeds.items():
-        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), None, None)
+        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
         if eq.passes_full_criteria():
             enriched_pass[t] = eq
+
+    # NOTE: NASDAQ company-profile descriptions used to be fetched here
+    # for every passing ticker (~1000+ HTTP calls). That dominated cold-
+    # cache load times. Description now falls back to industry+name in
+    # quotes_to_df. The catalyst dialog still has full per-ticker data.
 
     result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():
