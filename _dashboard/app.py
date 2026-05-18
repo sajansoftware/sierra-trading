@@ -1021,6 +1021,52 @@ def render_ipo_calendar() -> None:
 # =============================================================================
 # Main
 # =============================================================================
+def _check_password() -> bool:
+    """Returns True if user has entered the correct password.
+
+    Reads the expected password from st.secrets['password'] (set in
+    the Streamlit Cloud dashboard under Settings -> Secrets, or locally
+    via _dashboard/.streamlit/secrets.toml). Falls back to 'sierra' for
+    local dev if no secret is configured."""
+    if st.session_state.get("password_ok"):
+        return True
+
+    # Get expected password from secrets, fallback for local dev
+    try:
+        expected = st.secrets["password"]
+    except (FileNotFoundError, KeyError):
+        expected = "sierra"
+
+    st.markdown(
+        f"""<div style='max-width:440px;margin:6rem auto 0;
+            padding:32px 30px;background:{NAVY_CARD};
+            border:1px solid {BORDER};border-radius:10px;
+            text-align:center;'>
+          <div style='font-size:1.6rem;font-weight:700;color:{WHITE};
+            margin-bottom:8px;letter-spacing:-0.5px;'>Sierra Trading</div>
+          <div style='font-size:0.85rem;color:{WHITE_MUTE};
+            margin-bottom:24px;'>Sign in to access the dashboard</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_l, col_m, col_r = st.columns([1, 2, 1])
+    with col_m:
+        with st.form("login_form", clear_on_submit=False):
+            entered = st.text_input(
+                "Password", type="password", label_visibility="collapsed",
+                placeholder="Password",
+            )
+            submitted = st.form_submit_button("Sign in", use_container_width=True)
+            if submitted:
+                if entered == expected:
+                    st.session_state.password_ok = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
+    return False
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Sierra Trading",
@@ -1029,6 +1075,9 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
     inject_theme()
+
+    if not _check_password():
+        return
 
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
