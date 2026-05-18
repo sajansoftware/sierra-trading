@@ -1274,15 +1274,6 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "🔍 Aidan QA",
-                use_container_width=True,
-                key="aidan_btn",
-                type="primary" if st.session_state.view == "aidan" else "secondary",
-            ):
-                st.session_state.view = "aidan"
-                st.rerun()
-
-            if st.button(
                 "📅 IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
@@ -1298,6 +1289,25 @@ def main() -> None:
             st.caption(
                 f"Last load: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
+
+            # ---------- AI Employees ----------
+            st.markdown(
+                f"""<div style="margin-top:18px;padding-top:14px;
+                  border-top:1px solid {BORDER};">
+                  <div style="font-size:0.7rem;color:{WHITE_MUTE};
+                    text-transform:uppercase;letter-spacing:1px;
+                    margin-bottom:8px;">AI Employees</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "🔍 Aidan (QA Analyst)",
+                use_container_width=True,
+                key="aidan_btn",
+                type="primary" if st.session_state.view == "aidan" else "secondary",
+            ):
+                st.session_state.view = "aidan"
+                st.rerun()
 
     if is_journal:
         render_journal()
