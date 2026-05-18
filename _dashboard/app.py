@@ -473,7 +473,7 @@ def catalyst_dialog(ticker: str) -> None:
         f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Date","left"), ("PM Low","right"), ("PM High","right"),
+            ("Date","left"), ("Price @ 7:00 AM","right"), ("PM High","right"),
             ("Upside","right"), ("Type","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
@@ -507,10 +507,13 @@ def catalyst_dialog(ticker: str) -> None:
             )
         up = r["upside_pct"]
         up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
-        pm_low_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['pm_low']:.2f}</div>"
-            f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_low_time']}</div>"
-        )
+        if r.get("price_7am") is not None:
+            price_7am_cell = (
+                f"<div style='color:{WHITE_DIM};font-weight:500;'>"
+                f"${r['price_7am']:.2f}</div>"
+            )
+        else:
+            price_7am_cell = f"<div style='color:#64748b;'>—</div>"
         pm_high_cell = (
             f"<div style='color:{WHITE};font-weight:600;'>${r['pm_high']:.2f}</div>"
             f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_high_time']}</div>"
@@ -520,7 +523,7 @@ def catalyst_dialog(ticker: str) -> None:
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>{date_str}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
+            f"text-align:right;vertical-align:top;'>{price_7am_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"

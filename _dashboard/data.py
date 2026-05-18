@@ -388,12 +388,18 @@ def fetch_premarket_catalysts(
         if day_bars.empty:
             continue
         pm_high = float(day_bars["High"].max())
-        pm_low = float(day_bars["Low"].min())
         try:
             pm_high_ts = day_bars["High"].idxmax()
-            pm_low_ts = day_bars["Low"].idxmin()
         except Exception:
             continue
+        # Price at 7:00 AM ET (or the nearest bar within 7:00-7:09).
+        price_at_7am = None
+        try:
+            seven_bars = day_bars.between_time("07:00", "07:09")
+            if not seven_bars.empty:
+                price_at_7am = float(seven_bars.iloc[0]["Close"])
+        except Exception:
+            pass
         pc = prior_close(d)
         if pc is None or pc <= 0:
             continue
@@ -434,8 +440,7 @@ def fetch_premarket_catalysts(
 
         rows.append({
             "date":         d,
-            "pm_low":       pm_low,
-            "pm_low_time":  pm_low_ts.strftime("%I:%M %p ET").lstrip("0"),
+            "price_7am":    price_at_7am,
             "pm_high":      pm_high,
             "pm_high_time": pm_high_ts.strftime("%I:%M %p ET").lstrip("0"),
             "prior_close":  pc,
