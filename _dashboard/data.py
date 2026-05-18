@@ -844,11 +844,10 @@ def _filtered_by_category_impl(
         if eq.passes_full_criteria():
             enriched_pass[t] = eq
 
-    nd_descs = _nasdaq_descriptions_batch(tuple(sorted(enriched_pass.keys()))) if enriched_pass else {}
-    for t, eq in list(enriched_pass.items()):
-        desc = nd_descs.get(t)
-        if desc and not eq.summary:
-            enriched_pass[t] = dc_replace(eq, summary=desc)
+    # NOTE: NASDAQ company-profile descriptions used to be fetched here
+    # for every passing ticker (~1000+ HTTP calls). That dominated cold-
+    # cache load times. Description now falls back to industry+name in
+    # quotes_to_df. The catalyst dialog still has full per-ticker data.
 
     result: dict[str, list[Quote]] = {}
     for folder, tickers in universe_dict.items():
