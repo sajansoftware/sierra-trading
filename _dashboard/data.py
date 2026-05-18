@@ -44,16 +44,23 @@ class Quote:
         return self.previous_close if self.previous_close is not None else self.price
 
     def passes_filter(self) -> bool:
-        """Save-to-database criterion: close priced between $1 and $20.
+        """Price-only screen: $1 <= close <= $20.
 
-        Float is *informational only* — the ticker is included even if
-        yfinance can't return floatShares (which happens intermittently
-        when Yahoo 401s on the .info endpoint). Float still displays
-        in the table when available.
+        Float < 20M is enforced separately in filtered_by_category()
+        after the Finviz/shares-out enrichment step so we don't drop
+        tickers before the fallback data has a chance to populate.
         """
         if self.error or self.close is None:
             return False
         return MIN_PRICE <= self.close <= MAX_PRICE
+
+    def passes_full_criteria(self) -> bool:
+        """Full criterion: price $1-$20 AND known float < 20M."""
+        if not self.passes_filter():
+            return False
+        if self.float_shares is None or self.float_shares <= 0:
+            return False
+        return self.float_shares < MAX_FLOAT
 
 
 def _resolve_float_shares(info: dict) -> int | None:
@@ -153,14 +160,22 @@ def fetch_top_movers(
     LOD / HOD reported below are pre-market low / pre-market high
     (not full-day). Returns rows sorted by PM move descending.
     """
+    # Enrich quotes with Finviz fallback so the float filter has
+    # something to work with even when yfinance .info 401s.
     quotes = fetch_quotes(universe_tickers)
+    needs_fv = [
+        q.ticker for q in quotes.values()
+        if q.passes_filter() and (q.float_shares is None or q.float_shares <= 0)
+    ]
+    fv_stats = _finviz_stats_batch(tuple(sorted(set(needs_fv)))) if needs_fv else {}
+    enriched_quotes: dict[str, Quote] = {}
+    for t, q in quotes.items():
+        enriched_quotes[t] = _enrich_with_fallbacks(q, None, fv_stats.get(t), None)
+
     eligible = [
-        q for q in quotes.values()
-        if q.passes_filter()                              # price $1-$20
-        and q.previous_close and q.previous_close > 0     # need a baseline
-        # Float is informational: include when unknown; only exclude when
-        # we know it's above the cap.
-        and (q.float_shares is None or q.float_shares < max_float)
+        q for q in enriched_quotes.values()
+        if q.passes_full_criteria()                       # price $1-$20 + float < 20M
+        and q.previous_close and q.previous_close > 0
     ]
 
     try:
@@ -769,14 +784,17 @@ def filtered_by_category(
     for folder, rows in result.items():
         enriched: list[Quote] = []
         for q in rows:
-            enriched.append(
-                _enrich_with_fallbacks(
-                    q,
-                    nd_prices.get(q.ticker),
-                    fv_stats.get(q.ticker),
-                    nd_descs.get(q.ticker),
-                )
+            eq = _enrich_with_fallbacks(
+                q,
+                nd_prices.get(q.ticker),
+                fv_stats.get(q.ticker),
+                nd_descs.get(q.ticker),
             )
+            # Final criterion: price $1-$20 AND known float < 20M.
+            # Float is checked AFTER enrichment so the Finviz/shares_out
+            # fallback has a chance to populate it.
+            if eq.passes_full_criteria():
+                enriched.append(eq)
         enriched.sort(key=lambda q: (q.float_shares or 1e12))
         result[folder] = enriched
     return result
