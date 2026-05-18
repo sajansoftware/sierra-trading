@@ -73,8 +73,25 @@ def UNIVERSE() -> dict[str, list[str]]:
     for ticker, info in INFO.items():
         for cat in info.categories:
             out[cat].append(ticker)
+    try:
+        from screener import discover_by_sector, SECTOR_ENERGY
+        for sub, syms in discover_by_sector(SECTOR_ENERGY).items():
+            if sub not in out:
+                continue
+            for s in syms:
+                if s not in out[sub]:
+                    out[sub].append(s)
+    except Exception:
+        pass
     return out
 
 
 def all_tickers() -> list[str]:
-    return list(INFO.keys())
+    seen: set[str] = set()
+    out: list[str] = []
+    for syms in UNIVERSE().values():
+        for s in syms:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+    return out

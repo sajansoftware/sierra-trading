@@ -18,7 +18,7 @@ import requests
 import streamlit as st
 
 NASDAQ_URL = "https://api.nasdaq.com/api/screener/stocks"
-NASDAQ_PARAMS = {"tableonly": "true", "exchange": "nasdaq", "download": "true"}
+EXCHANGES = ("nasdaq", "nyse", "amex")
 NASDAQ_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -111,12 +111,34 @@ def _parse_marketcap(s: str | None) -> float | None:
 
 @st.cache_data(ttl=86_400, show_spinner=False)  # 24 hours
 def fetch_nasdaq_universe() -> list[dict]:
-    """Hit NASDAQ's screener API and return the raw rows."""
-    r = requests.get(
-        NASDAQ_URL, params=NASDAQ_PARAMS, headers=NASDAQ_HEADERS, timeout=30
-    )
-    r.raise_for_status()
-    return r.json()["data"]["rows"]
+    """Hit the NASDAQ screener API across NASDAQ + NYSE + AMEX and merge.
+
+    NASDAQ.com hosts the screener for all three US exchanges via the
+    same endpoint with an `exchange` parameter. Tickers are deduped by
+    symbol with the NASDAQ row winning on collision.
+    """
+    out: dict[str, dict] = {}
+    for exch in EXCHANGES:
+        try:
+            r = requests.get(
+                NASDAQ_URL,
+                params={"tableonly": "true", "exchange": exch, "download": "true"},
+                headers=NASDAQ_HEADERS,
+                timeout=30,
+            )
+            r.raise_for_status()
+            rows = r.json()["data"]["rows"] or []
+        except Exception:
+            continue
+        for row in rows:
+            sym = (row.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            # Tag which exchange this came from (useful for UI/debug)
+            row["_exchange"] = exch.upper()
+            # Keep first (NASDAQ wins since it iterates first)
+            out.setdefault(sym, row)
+    return list(out.values())
 
 
 def is_biotech_relevant(row: dict) -> bool:
@@ -264,6 +286,38 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Medical/Nursing Services":                (SECTOR_HCSVC, "Hospitals_Health_Systems"),
     "Health Care Distributors":                (SECTOR_HCSVC, "Pharmacy_Distributors"),
     "Misc Health and Biotechnology Services":  (SECTOR_HCSVC, "Healthcare_IT_Telehealth"),
+    # ---------- Technology ----------
+    "EDP Services":                            (SECTOR_TECH, "IT_Services"),
+    "Computer Software: Prepackaged Software": (SECTOR_TECH, "Software_SaaS"),
+    "Computer Software: Programming, Data Processing": (SECTOR_TECH, "Software_SaaS"),
+    "Diversified Commercial Services":         (SECTOR_TECH, "IT_Services"),
+    "Computer Manufacturing":                  (SECTOR_TECH, "Consumer_Electronics"),
+    "Computer Communications Equipment":       (SECTOR_TECH, "Cloud_Infrastructure"),
+    "Computer peripheral equipment":           (SECTOR_TECH, "Consumer_Electronics"),
+    "Semiconductors":                          (SECTOR_TECH, "Semiconductors"),
+    "Electronic Components":                   (SECTOR_TECH, "Semiconductors"),
+    # ---------- Energy ----------
+    "Oil & Gas Production":                    (SECTOR_ENERGY, "Exploration_Production"),
+    "Integrated oil Companies":                (SECTOR_ENERGY, "Exploration_Production"),
+    "Oilfield Services/Equipment":             (SECTOR_ENERGY, "Oilfield_Services_Equipment"),
+    "Oil Refining/Marketing":                  (SECTOR_ENERGY, "Midstream"),
+    "Natural Gas Distribution":                (SECTOR_ENERGY, "Midstream"),
+    "Coal Mining":                             (SECTOR_ENERGY, "Coal_Uranium"),
+    "Industrial Machinery/Components":         (SECTOR_INDUSTRIAL, "Machinery"),
+    # ---------- Industrials ----------
+    "Aerospace":                               (SECTOR_INDUSTRIAL, "Aerospace_Defense"),
+    "Military/Government/Technical":           (SECTOR_INDUSTRIAL, "Aerospace_Defense"),
+    "Engineering & Construction":              (SECTOR_INDUSTRIAL, "Construction_Engineering"),
+    "Construction/Ag Equipment/Trucks":        (SECTOR_INDUSTRIAL, "Machinery"),
+    "Marine Transportation":                   (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Trucking Freight/Courier Services":       (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Air Freight/Delivery Services":           (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Railroads":                               (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Pollution Control Equipment":             (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Electrical Products":                     (SECTOR_INDUSTRIAL, "Electrical_Equipment"),
+    "Metal Fabrications":                      (SECTOR_INDUSTRIAL, "Machinery"),
+    "Environmental Services":                  (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Water Supply":                            (SECTOR_INDUSTRIAL, "Industrial_Services"),
 }
 
 # Keywords that nudge a ticker into Crypto-Adjacent sub-sector of Financials
