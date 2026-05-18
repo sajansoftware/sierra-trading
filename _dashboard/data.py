@@ -771,7 +771,31 @@ def _enrich_with_fallbacks(
                       summary=summary)
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def _filtered_by_category_cached(
+    universe_tuple: tuple[tuple[str, tuple[str, ...]], ...],
+    ticker_tuple: tuple[str, ...],
+) -> dict[str, list[Quote]]:
+    """Hashable-key wrapper so Streamlit can cache the final dict.
+
+    Inputs converted from dict/list to nested tuples before the cache
+    key is computed; on a hit we return the previously-built dict and
+    skip all the Finviz / NASDAQ / iteration work.
+    """
+    universe_dict = {k: list(v) for k, v in universe_tuple}
+    return _filtered_by_category_impl(universe_dict, list(ticker_tuple))
+
+
 def filtered_by_category(
+    universe_dict: dict[str, list[str]],
+    ticker_list: list[str],
+) -> dict[str, list[Quote]]:
+    """Public entry: forwards to the cached implementation."""
+    uni_tuple = tuple((k, tuple(v)) for k, v in universe_dict.items())
+    return _filtered_by_category_cached(uni_tuple, tuple(ticker_list))
+
+
+def _filtered_by_category_impl(
     universe_dict: dict[str, list[str]],
     ticker_list: list[str],
 ) -> dict[str, list[Quote]]:
