@@ -7,3 +7,4 @@ venv/
 .streamlit/secrets.toml
 .DS_Store
 .claude/
+_dashboard/journal_data.json
