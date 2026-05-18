@@ -29,7 +29,9 @@ NASDAQ_HEADERS = {
     "Referer": "https://www.nasdaq.com/",
 }
 
-# Healthcare industries that all funnel into Red by default
+# Healthcare industries that funnel into biotech Red by default.
+# Non-biotech health (hospitals, insurance, healthcare IT, distributors)
+# are routed to the Healthcare Services sector by classify_ticker_sector.
 HEALTHCARE_INDUSTRIES: set[str] = {
     "Biotechnology: Biological Products (No Diagnostic Substances)",
     "Biotechnology: Commercial Physical & Biological Resarch",
@@ -40,15 +42,12 @@ HEALTHCARE_INDUSTRIES: set[str] = {
     "Medical Specialities",
     "Medical/Dental Instruments",
     "Medical Electronics",
-    "Medical/Nursing Services",
     "Industrial Specialties",
     "Ophthalmic Goods",
     "Other Pharmaceuticals",
     "Pharmaceuticals and Biotechnology",
-    "Misc Health and Biotechnology Services",
     "Medicinal Chemicals and Botanical Products",
     "Precision Instruments",
-    "Hospital/Nursing Management",
 }
 
 # Industries where every member is biotech-relevant (no keyword filter).
@@ -174,13 +173,17 @@ def candidate_symbols(rows: Iterable[dict]) -> list[str]:
 # Cross-sector classifier: NASDAQ industry -> (sector, sub_sector)
 # =============================================================================
 # Sector keys match the SECTORS dict in app.py
-SECTOR_BIOTECH    = "Biotechnology"
-SECTOR_TECH       = "Technology"
-SECTOR_ENERGY     = "Energy"
-SECTOR_INDUSTRIAL = "Industrials"
-SECTOR_MATERIALS  = "Materials"
-SECTOR_CONSUMER_D = "Consumer_Discretionary"
-SECTOR_FINANCIALS = "Financials"
+SECTOR_BIOTECH       = "Biotechnology"
+SECTOR_TECH          = "Technology"
+SECTOR_ENERGY        = "Energy"
+SECTOR_INDUSTRIAL    = "Industrials"
+SECTOR_MATERIALS     = "Materials"
+SECTOR_CONSUMER_D    = "Consumer_Discretionary"
+SECTOR_FINANCIALS    = "Financials"
+SECTOR_COMMUNICATION = "Communication_Services"
+SECTOR_STAPLES       = "Consumer_Staples"
+SECTOR_REALESTATE    = "Real_Estate"
+SECTOR_HCSVC         = "Healthcare_Services"
 
 # Map: NASDAQ industry string -> (sector_key, sub_sector_folder)
 # Comprehensive mapping built from observed NASDAQ industry vocabulary.
@@ -232,6 +235,35 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Finance: Consumer Services":              (SECTOR_FINANCIALS, "Specialty_Finance"),
     "Finance Companies":                       (SECTOR_FINANCIALS, "Specialty_Finance"),
     "Business Services":                       (SECTOR_FINANCIALS, "Fintech_Payments"),
+    # ---------- Communication Services ----------
+    "Telecommunications Equipment":            (SECTOR_COMMUNICATION, "Wireless_Wireline_Telecom"),
+    "Radio And Television Broadcasting And Communications Equipment": (SECTOR_COMMUNICATION, "Media_Entertainment"),
+    "Television Services":                     (SECTOR_COMMUNICATION, "Media_Entertainment"),
+    "Cable & Other Pay Television Services":   (SECTOR_COMMUNICATION, "Streaming"),
+    "Newspapers/Magazines":                    (SECTOR_COMMUNICATION, "Publishing_News"),
+    "Books":                                   (SECTOR_COMMUNICATION, "Publishing_News"),
+    "Advertising":                             (SECTOR_COMMUNICATION, "Advertising_MarTech"),
+    "Multi-Sector Companies":                  (SECTOR_COMMUNICATION, "Media_Entertainment"),
+    # ---------- Consumer Staples ----------
+    "Packaged Foods":                          (SECTOR_STAPLES, "Food_Beverage"),
+    "Beverages (Production/Distribution)":     (SECTOR_STAPLES, "Food_Beverage"),
+    "Specialty Foods":                         (SECTOR_STAPLES, "Food_Beverage"),
+    "Meat/Poultry/Fish":                       (SECTOR_STAPLES, "Food_Beverage"),
+    "Food Distributors":                       (SECTOR_STAPLES, "Grocery_Distribution"),
+    "Food Chains":                             (SECTOR_STAPLES, "Grocery_Distribution"),
+    "Consumer Non-Durables":                   (SECTOR_STAPLES, "Household_Products"),
+    "Package Goods/Cosmetics":                 (SECTOR_STAPLES, "Personal_Care_Beauty"),
+    "Tobacco":                                 (SECTOR_STAPLES, "Tobacco_Vape"),
+    # ---------- Real Estate ----------
+    "Real Estate Investment Trusts":           (SECTOR_REALESTATE, "Diversified_REITs"),
+    "Real Estate":                             (SECTOR_REALESTATE, "Proptech"),
+    "Building operators":                      (SECTOR_REALESTATE, "Diversified_REITs"),
+    # ---------- Healthcare Services (non-biotech) ----------
+    "Managed Health Care":                     (SECTOR_HCSVC, "Health_Insurance"),
+    "Hospital/Nursing Management":             (SECTOR_HCSVC, "Hospitals_Health_Systems"),
+    "Medical/Nursing Services":                (SECTOR_HCSVC, "Hospitals_Health_Systems"),
+    "Health Care Distributors":                (SECTOR_HCSVC, "Pharmacy_Distributors"),
+    "Misc Health and Biotechnology Services":  (SECTOR_HCSVC, "Healthcare_IT_Telehealth"),
 }
 
 # Keywords that nudge a ticker into Crypto-Adjacent sub-sector of Financials

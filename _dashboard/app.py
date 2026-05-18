@@ -40,8 +40,13 @@ import industrials_universe
 import materials_universe
 import consumer_disc_universe
 import financials_universe
+import comm_services_universe
+import consumer_staples_universe
+import real_estate_universe
+import healthcare_svc_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
+from verifier import verify_categorization, SourceCheck
 
 ROOT = Path(__file__).parent
 
@@ -123,6 +128,41 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "BDCs":                     ("BDCs",                       ACCENT, ROOT / "Financials" / "BDCs"),
         "Specialty_Finance":        ("Specialty Finance",          ACCENT, ROOT / "Financials" / "Specialty_Finance"),
         "Crypto_Adjacent":          ("Crypto-Adjacent",            ACCENT, ROOT / "Financials" / "Crypto_Adjacent"),
+    },
+    "Communication Services": {
+        "Wireless_Wireline_Telecom": ("Wireless & Wireline Telecom", ACCENT, ROOT / "Communication_Services" / "Wireless_Wireline_Telecom"),
+        "Satellite_Towers":          ("Satellite & Towers",          ACCENT, ROOT / "Communication_Services" / "Satellite_Towers"),
+        "Media_Entertainment":       ("Media & Entertainment",       ACCENT, ROOT / "Communication_Services" / "Media_Entertainment"),
+        "Advertising_MarTech":       ("Advertising & MarTech",       ACCENT, ROOT / "Communication_Services" / "Advertising_MarTech"),
+        "Social_Gaming_Platforms":   ("Social & Gaming Platforms",   ACCENT, ROOT / "Communication_Services" / "Social_Gaming_Platforms"),
+        "Publishing_News":           ("Publishing & News",           ACCENT, ROOT / "Communication_Services" / "Publishing_News"),
+        "Streaming":                 ("Streaming",                   ACCENT, ROOT / "Communication_Services" / "Streaming"),
+    },
+    "Consumer Staples": {
+        "Food_Beverage":         ("Food & Beverage",         ACCENT, ROOT / "Consumer_Staples" / "Food_Beverage"),
+        "Alt_Protein_Food_Tech": ("Alt-Protein & Food Tech", ACCENT, ROOT / "Consumer_Staples" / "Alt_Protein_Food_Tech"),
+        "Household_Products":    ("Household Products",      ACCENT, ROOT / "Consumer_Staples" / "Household_Products"),
+        "Personal_Care_Beauty":  ("Personal Care & Beauty",  ACCENT, ROOT / "Consumer_Staples" / "Personal_Care_Beauty"),
+        "Tobacco_Vape":          ("Tobacco & Vape",          ACCENT, ROOT / "Consumer_Staples" / "Tobacco_Vape"),
+        "Grocery_Distribution":  ("Grocery & Distribution",  ACCENT, ROOT / "Consumer_Staples" / "Grocery_Distribution"),
+    },
+    "Real Estate": {
+        "Diversified_REITs":          ("Diversified REITs",           ACCENT, ROOT / "Real_Estate" / "Diversified_REITs"),
+        "Residential_REITs":          ("Residential REITs",           ACCENT, ROOT / "Real_Estate" / "Residential_REITs"),
+        "Commercial_Office_REITs":    ("Commercial / Office REITs",   ACCENT, ROOT / "Real_Estate" / "Commercial_Office_REITs"),
+        "Industrial_Logistics_REITs": ("Industrial / Logistics REITs",ACCENT, ROOT / "Real_Estate" / "Industrial_Logistics_REITs"),
+        "Data_Center_REITs":          ("Data Center REITs",           ACCENT, ROOT / "Real_Estate" / "Data_Center_REITs"),
+        "Specialty_REITs":            ("Specialty REITs",             ACCENT, ROOT / "Real_Estate" / "Specialty_REITs"),
+        "Mortgage_REITs":             ("Mortgage REITs",              ACCENT, ROOT / "Real_Estate" / "Mortgage_REITs"),
+        "Proptech":                   ("Proptech",                    ACCENT, ROOT / "Real_Estate" / "Proptech"),
+    },
+    "Healthcare Services": {
+        "Hospitals_Health_Systems": ("Hospitals & Health Systems", ACCENT, ROOT / "Healthcare_Services" / "Hospitals_Health_Systems"),
+        "Health_Insurance":         ("Health Insurance",           ACCENT, ROOT / "Healthcare_Services" / "Health_Insurance"),
+        "Healthcare_IT_Telehealth": ("Healthcare IT & Telehealth", ACCENT, ROOT / "Healthcare_Services" / "Healthcare_IT_Telehealth"),
+        "Pharmacy_Distributors":    ("Pharmacy & Distributors",    ACCENT, ROOT / "Healthcare_Services" / "Pharmacy_Distributors"),
+        "Medical_Devices":          ("Medical Devices",            ACCENT, ROOT / "Healthcare_Services" / "Medical_Devices"),
+        "Dental_Vision_Hearing":    ("Dental, Vision & Hearing",   ACCENT, ROOT / "Healthcare_Services" / "Dental_Vision_Hearing"),
     },
 }
 
@@ -392,6 +432,102 @@ def _close_dialog() -> None:
     pass
 
 
+_SECTOR_LOOKUP_MODS = [
+    ("Biotechnology",          bio_universe),
+    ("Technology",             tech_universe),
+    ("Energy",                  energy_universe),
+    ("Industrials",            industrials_universe),
+    ("Materials",              materials_universe),
+    ("Consumer_Discretionary", consumer_disc_universe),
+    ("Financials",             financials_universe),
+    ("Communication_Services", comm_services_universe),
+    ("Consumer_Staples",       consumer_staples_universe),
+    ("Real_Estate",            real_estate_universe),
+    ("Healthcare_Services",    healthcare_svc_universe),
+]
+
+
+def _find_ticker_sector(ticker: str) -> str | None:
+    """Return the dashboard sector key the ticker is assigned to."""
+    for sector_key, mod in _SECTOR_LOOKUP_MODS:
+        try:
+            if ticker in mod.all_tickers():
+                return sector_key
+        except Exception:
+            continue
+    return None
+
+
+_CONFIDENCE_COLOR = {
+    "high": GOOD,
+    "low":  WARN,
+    "none": DANGER,
+}
+
+
+def _render_verification_section(ticker: str) -> None:
+    """3-source category verification block inside the catalyst dialog."""
+    sector = _find_ticker_sector(ticker)
+    if not sector:
+        return
+    sector_display = sector.replace("_", " ")
+    with st.spinner("Cross-checking category against 3 sources…"):
+        try:
+            checks, confidence = verify_categorization(ticker, sector)
+        except Exception:
+            return
+    col = _CONFIDENCE_COLOR.get(confidence, WHITE_MUTE)
+    UNAVAILABLE = ("(no data)", "(no website)")
+    n_avail = sum(1 for c in checks if c.sector_label not in UNAVAILABLE)
+    n_match = sum(1 for c in checks if c.matches)
+    st.markdown(
+        f"""<div style='margin-top:18px;padding:14px 16px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid {BORDER};border-radius:6px;'>
+          <div style='display:flex;justify-content:space-between;
+            align-items:center;margin-bottom:10px;'>
+            <span style='font-size:0.95rem;font-weight:600;color:{WHITE};'>
+              Category Verification — assigned to {sector_display}
+            </span>
+            <span style='background:{col};color:#06121e;font-weight:700;
+              font-size:0.72rem;padding:3px 10px;border-radius:4px;'>
+              {n_match}/{n_avail} available sources agree &nbsp;·&nbsp; {confidence.upper()}
+            </span>
+          </div>""",
+        unsafe_allow_html=True,
+    )
+    for c in checks:
+        mark = "✓" if c.matches else "✗"
+        mark_col = GOOD if c.matches else DANGER
+        snippet = c.snippet or "(no description available)"
+        link_html = (
+            f"<a href='{c.link}' target='_blank' style='color:{ACCENT};"
+            f"text-decoration:none;font-size:0.78rem;'>view ↗</a>"
+            if c.link else ""
+        )
+        st.markdown(
+            f"""<div style='padding:9px 0;border-top:1px solid {BORDER};
+                display:flex;gap:14px;align-items:flex-start;'>
+              <span style='color:{mark_col};font-weight:700;
+                font-size:1rem;width:14px;'>{mark}</span>
+              <div style='flex:1;'>
+                <div style='display:flex;justify-content:space-between;
+                  align-items:baseline;margin-bottom:3px;'>
+                  <span style='color:{WHITE};font-weight:600;
+                    font-size:0.85rem;'>{c.source}</span>
+                  <span style='color:{WHITE_MUTE};font-size:0.78rem;'>
+                    {c.sector_label} &nbsp;·&nbsp; {link_html}
+                  </span>
+                </div>
+                <div style='color:{WHITE_DIM};font-size:0.82rem;
+                  line-height:1.4;'>{snippet}</div>
+              </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 @st.dialog("Catalysts", width="large")
 def catalyst_dialog(ticker: str) -> None:
     with st.spinner("Loading pre-market catalysts…"):
@@ -489,6 +625,9 @@ def catalyst_dialog(ticker: str) -> None:
         </table>""",
         unsafe_allow_html=True,
     )
+
+    # 3-source category verification (yfinance + NASDAQ official + company website)
+    _render_verification_section(ticker)
 
     if st.button("Close", key="close_dlg"):
         _close_dialog()
@@ -701,7 +840,9 @@ def render_top_movers() -> None:
     pool: set[str] = set()
     for mod in (bio_universe, tech_universe, energy_universe,
                 industrials_universe, materials_universe,
-                consumer_disc_universe, financials_universe):
+                consumer_disc_universe, financials_universe,
+                comm_services_universe, consumer_staples_universe,
+                real_estate_universe, healthcare_svc_universe):
         try:
             pool.update(mod.all_tickers())
         except Exception:
@@ -1079,6 +1220,10 @@ def main() -> None:
         "Materials":              materials_universe,
         "Consumer Discretionary": consumer_disc_universe,
         "Financials":             financials_universe,
+        "Communication Services": comm_services_universe,
+        "Consumer Staples":       consumer_staples_universe,
+        "Real Estate":            real_estate_universe,
+        "Healthcare Services":    healthcare_svc_universe,
     }[main_cat]
 
     ticker_count = f"{len(uni_mod.INFO)} curated"
