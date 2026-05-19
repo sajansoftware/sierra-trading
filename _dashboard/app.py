@@ -36,6 +36,7 @@ from data import (
 from changelog import record_snapshot, recent_events
 from sector_heads import HEADS as SECTOR_HEADS, reply as head_reply
 from managing_directors import MDS, reply as md_reply
+from sentiment_intel import sector_sentiment_snapshot, briefing_lines, detect_patterns
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -1010,6 +1011,46 @@ def sector_head_chat_dialog(sector_key: str) -> None:
 
 
 # =============================================================================
+# Sector briefing card (sentiment intel)
+# =============================================================================
+def render_sector_briefing(head_name: str, snap) -> None:
+    """Visible card showing the sector head's current read on sentiment."""
+    skew = snap.skew
+    skew_col = {
+        "Bullish": GOOD,
+        "Bearish": DANGER,
+        "Mixed":   WARN,
+        "Thin":    WHITE_MUTE,
+    }.get(skew, WHITE_MUTE)
+    lines = briefing_lines(snap)
+    bullets = "".join(
+        f"<li style='margin:4px 0;color:{WHITE_DIM};'>{ln}</li>" for ln in lines
+    ) if lines else (
+        f"<li style='color:{WHITE_MUTE};font-style:italic;'>"
+        f"Quiet tape — no notable patterns.</li>"
+    )
+
+    st.markdown(
+        f"""<div style="background:{NAVY_CARD};border:1px solid {BORDER};
+              border-left:4px solid {skew_col};border-radius:10px;
+              padding:14px 18px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;
+              align-items:center;margin-bottom:8px;">
+            <div style="font-size:0.7rem;color:{WHITE_MUTE};
+              text-transform:uppercase;letter-spacing:1px;">
+              {head_name}'s briefing &middot; {snap.window_days}-day window</div>
+            <div style="font-size:0.72rem;font-weight:700;color:{skew_col};
+              text-transform:uppercase;letter-spacing:1px;">{skew} &middot;
+              {snap.bull} bull / {snap.bear} bear / {snap.neutral} neut</div>
+          </div>
+          <ul style="margin:0;padding-left:18px;font-size:0.85rem;
+            line-height:1.55;">{bullets}</ul>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
 # Managing Director chat dialog
 # =============================================================================
 @st.dialog("Managing Director", width="large")
@@ -1121,21 +1162,71 @@ def render_manage_employees() -> None:
         unsafe_allow_html=True,
     )
 
-    # Build context for MD chats
+    # Build context for MD chats — pulls sentiment snapshots from every
+    # sector the user has visited (cheap; cached on session).
     from changelog import recent_events as _recent_events
     changelog = _recent_events(limit=40)
     sectors_covered = len({e.get("sector") for e in changelog})
     total_tickers = 0
-    # Cheap aggregate count across sector chat contexts the user has touched
+    cross_sector_sent: dict = {}
     for key in st.session_state.keys():
         if isinstance(key, str) and key.startswith("chat_ctx_"):
+            sec = key[len("chat_ctx_"):]
             ctx = st.session_state.get(key) or {}
             total_tickers += len(ctx.get("tickers") or [])
+            snap = ctx.get("sentiment")
+            if snap is not None:
+                cross_sector_sent[sec] = snap
     st.session_state.md_ctx = {
         "changelog": changelog,
-        "sectors_covered": sectors_covered,
+        "sectors_covered": max(sectors_covered, len(cross_sector_sent)),
         "total_tickers": total_tickers,
+        "cross_sector_sentiment": cross_sector_sent,
     }
+
+    # Cross-sector sentiment strip — shows the firm-wide tape at a glance.
+    cross = st.session_state.md_ctx.get("cross_sector_sentiment") or {}
+    if cross:
+        st.markdown(
+            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
+            f"text-transform:uppercase;letter-spacing:1px;"
+            f"margin-bottom:8px;'>Firm-wide sentiment "
+            f"({len(cross)} desks reporting)</div>",
+            unsafe_allow_html=True,
+        )
+        # Sort: bullish first, then mixed, then bearish, then thin
+        order = {"Bullish": 0, "Mixed": 1, "Bearish": 2, "Thin": 3}
+        rows = sorted(
+            cross.items(),
+            key=lambda kv: (order.get(kv[1].skew, 99),
+                            -(kv[1].bull - kv[1].bear)),
+        )
+        chips = []
+        for sec, snap in rows:
+            skew = snap.skew
+            col = {"Bullish": GOOD, "Bearish": DANGER,
+                   "Mixed": WARN, "Thin": WHITE_MUTE}.get(skew, WHITE_MUTE)
+            chips.append(
+                f"<div style='display:inline-block;margin:0 8px 8px 0;"
+                f"padding:8px 12px;background:{NAVY_CARD};"
+                f"border:1px solid {BORDER};border-left:3px solid {col};"
+                f"border-radius:6px;'>"
+                f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
+                f"text-transform:uppercase;letter-spacing:0.5px;'>{sec}</div>"
+                f"<div style='font-size:0.82rem;color:{WHITE};font-weight:600;'>"
+                f"{skew} &middot; "
+                f"<span style='color:{GOOD};'>{snap.bull}</span>/"
+                f"<span style='color:{DANGER};'>{snap.bear}</span>"
+                f"</div></div>"
+            )
+        st.markdown(
+            "<div style='margin-bottom:18px;'>" + "".join(chips) + "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("Visit a sector page to seed the cross-sector sentiment "
+                "view. The MDs synthesize across whatever desks you've "
+                "loaded.")
 
     # Grid of MD cards
     md_list = list(MDS.values())
@@ -2011,21 +2102,34 @@ def main() -> None:
     except Exception:
         pass
 
-    # Build chat context for the sector head (cheap; cached on session)
+    # Build chat context for the sector head (cheap; cached on session).
+    # Also compute sentiment snapshot once per render and stash it for
+    # both the briefing card and the chat reply engine.
+    snap = None
     if head is not None:
         try:
             from changelog import recent_events as _recent_events
             sub_folders = list(by_cat.keys())
             tickers_list = sorted({q.ticker for syms in by_cat.values() for q in syms})
+            try:
+                snap = sector_sentiment_snapshot(
+                    main_cat, tuple(tickers_list), window_days=7,
+                )
+            except Exception:
+                snap = None
             st.session_state[f"chat_ctx_{main_cat}"] = {
                 "tickers": tickers_list,
                 "info": uni_mod.INFO,
                 "sub_folders": sub_folders,
                 "changelog": _recent_events(limit=30),
-                "movers": [],   # populated when user visits Top Movers
+                "movers": [],
+                "sentiment": snap,
             }
         except Exception:
             pass
+
+    if head is not None and snap is not None:
+        render_sector_briefing(head.name, snap)
 
     if st.session_state.get("show_chat") == main_cat:
         sector_head_chat_dialog(main_cat)

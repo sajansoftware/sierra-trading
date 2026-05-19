@@ -163,6 +163,15 @@ def _intent(prompt: str) -> str:
         return "greet"
     if any(w in p for w in ("help", "what can you")):
         return "help"
+    if any(w in p for w in ("sentiment", "tone", "mood", "tape", "skew",
+                            "bullish", "bearish", "feeling")):
+        return "sentiment"
+    if any(w in p for w in ("pattern", "theme", "cluster", "shift",
+                            "rotation", "trend")):
+        return "patterns"
+    if any(w in p for w in ("brief", "read", "what's happening",
+                            "what's going on", "update me")):
+        return "brief"
     if any(w in p for w in ("list", "names", "universe", "tickers", "what's in",
                             "show me the", "watchlist", "watch list")):
         return "list"
@@ -172,7 +181,7 @@ def _intent(prompt: str) -> str:
     if any(w in p for w in ("mover", "biggest", "top move", "leaders", "gainer",
                             "loser", "premarket move")):
         return "movers"
-    if any(w in p for w in ("catalyst", "news", "why is", "what's happening")):
+    if any(w in p for w in ("catalyst", "news", "why is")):
         return "catalyst"
     if any(w in p for w in ("count", "how many")):
         return "count"
@@ -225,10 +234,33 @@ def reply(head: SectorHead, prompt: str, context: dict) -> str:
         return head.intro
 
     if intent == "help":
-        return ("Try: 'list tickers', 'top movers', 'what changed', "
-                "'tell me about [TICKER]', 'what's the focus today', "
-                "or just ask about my coverage areas: "
-                + ", ".join(head.expertise) + ".")
+        return ("Try: 'what's the sentiment', 'any patterns', 'brief me', "
+                "'list tickers', 'top movers', 'what changed', "
+                "'tell me about [TICKER]', 'what's the focus today'. "
+                "I cover: " + ", ".join(head.expertise) + ".")
+
+    snap = context.get("sentiment")
+
+    if intent in ("brief", "sentiment", "patterns"):
+        if snap is None or snap.total < 5:
+            return ("Thin headline flow in my desk's window — nothing "
+                    "actionable on sentiment yet. Hit Refresh to repull.")
+        from sentiment_intel import detect_patterns as _dp
+        bullets = _dp(snap)
+        head_line = (f"{head.sector} read — {snap.skew} skew "
+                     f"({snap.bull} bull / {snap.bear} bear / "
+                     f"{snap.neutral} neut over {snap.window_days}d, "
+                     f"{snap.n_tickers_with_news}/"
+                     f"{snap.n_tickers_scanned} names with news).")
+        body = "\n\n• " + "\n\n• ".join(bullets) if bullets else ""
+        # Sample headlines
+        samples = []
+        if intent in ("brief", "sentiment"):
+            for t, h in (snap.sample_bull_headlines[:2] +
+                         snap.sample_bear_headlines[:2]):
+                samples.append(f"_{t}_: {h}")
+        sample_block = ("\n\n" + "\n\n".join(samples)) if samples else ""
+        return head_line + body + sample_block
 
     if intent == "count":
         return (f"{len(tickers)} {head.sector} names currently pass the "

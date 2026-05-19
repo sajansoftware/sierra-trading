@@ -127,6 +127,12 @@ def _intent(prompt: str) -> str:
     if any(w in p for w in ("change", "added", "removed", "new tickers",
                             "what's new")):
         return "changes"
+    if any(w in p for w in ("sentiment", "tone", "mood", "skew", "bullish",
+                            "bearish", "tape")):
+        return "sentiment"
+    if any(w in p for w in ("hot", "rotation", "theme", "cluster",
+                            "where is the action", "where's the action")):
+        return "themes"
     if any(w in p for w in ("size", "sizing", "stop", "loss limit",
                             "kill switch", "exposure")):
         return "risk"
@@ -162,6 +168,43 @@ def reply(md: MD, prompt: str, context: dict) -> str:
     if intent == "reports":
         return ("Direct reports / desks I manage:\n\n• "
                 + "\n• ".join(md.reports))
+
+    cross_sector: dict = context.get("cross_sector_sentiment") or {}
+
+    if intent in ("sentiment", "themes"):
+        if not cross_sector:
+            return ("No sector sentiment cached yet. Visit a few sector "
+                    "pages — that warms the cache and I can synthesize.")
+        # Rank sectors by skew strength
+        rows = []
+        for sec, snap in cross_sector.items():
+            if snap is None or getattr(snap, "total", 0) < 5:
+                continue
+            skew = snap.skew
+            net = snap.bull - snap.bear
+            rows.append((sec, skew, net, snap.bull, snap.bear, snap.total))
+        if not rows:
+            return ("All desks running thin headline flow this window. "
+                    "Hold off on sentiment-driven calls.")
+        rows.sort(key=lambda r: -r[2])
+        top_bull = [r for r in rows if r[1] == "Bullish"][:3]
+        top_bear = [r for r in rows if r[1] == "Bearish"][:3]
+        bits = []
+        if top_bull:
+            bits.append("**Bullish desks**: " + ", ".join(
+                f"{s} (+{b-bear} net)" for s, _, _, b, bear, _ in top_bull
+            ))
+        if top_bear:
+            bits.append("**Bearish desks**: " + ", ".join(
+                f"{s} (-{bear-b} net)" for s, _, _, b, bear, _ in top_bear
+            ))
+        mixed_count = sum(1 for r in rows if r[1] == "Mixed")
+        if mixed_count:
+            bits.append(f"{mixed_count} desk(s) running mixed.")
+        if md.name == "Victoria":
+            bits.append("Capital bias: lean into the bullish desks "
+                        "with fresh adds; risk-off on the bearish ones.")
+        return "Cross-sector sentiment read:\n\n" + "\n\n".join(bits)
 
     if intent == "weekly":
         if md.name == "Victoria":
