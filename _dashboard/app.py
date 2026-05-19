@@ -630,14 +630,6 @@ def catalyst_dialog(ticker: str) -> None:
 def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> None:
     label, _, dir_path = SECTORS[sector][folder]
 
-    st.markdown(
-        f"""<div style="
-            border-left:4px solid {ACCENT};background:{NAVY_CARD};
-            padding:14px 18px;border-radius:6px;margin-bottom:18px;">
-            <span style="font-size:1.2rem;font-weight:600;color:{WHITE};">{label}</span>
-        </div>""",
-        unsafe_allow_html=True,
-    )
     para, areas = load_description_parts(dir_path)
     if para:
         st.markdown(
@@ -646,16 +638,13 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
             unsafe_allow_html=True,
         )
     if areas:
-        cards = "".join(
-            f"<div style='background:{NAVY_CARD};border:1px solid {BORDER};"
-            f"border-radius:6px;padding:10px 14px;font-size:0.85rem;"
-            f"color:{WHITE};line-height:1.4;'>{a}</div>"
+        items = "".join(
+            f"<li style='color:{WHITE};margin-bottom:4px;'>{a}</li>"
             for a in areas
         )
         st.markdown(
-            f"<div style='display:grid;grid-template-columns:"
-            f"repeat(auto-fill,minmax(220px,1fr));gap:10px;"
-            f"margin-bottom:20px;'>{cards}</div>",
+            f"<ul style='font-size:0.9rem;line-height:1.5;"
+            f"padding-left:22px;margin:0 0 20px 0;'>{items}</ul>",
             unsafe_allow_html=True,
         )
 
