@@ -34,6 +34,7 @@ from data import (
     tv_num,
 )
 from changelog import record_snapshot, recent_events
+from sector_heads import HEADS as SECTOR_HEADS, reply as head_reply
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -907,6 +908,80 @@ def changelog_dialog() -> None:
 
 
 # =============================================================================
+# Sector Head chat overlay
+# =============================================================================
+@st.dialog("Sector Head", width="large")
+def sector_head_chat_dialog(sector_key: str) -> None:
+    """Modal chat overlay with the sector's head trader/analyst."""
+    head = SECTOR_HEADS.get(sector_key)
+    if head is None:
+        st.warning("No sector head assigned.")
+        return
+
+    # Pull live context cached on session by main() right before
+    # opening the dialog — see render_chat_overlay_button.
+    ctx = st.session_state.get(f"chat_ctx_{sector_key}", {})
+
+    # Header card
+    initials = head.name[:1].upper()
+    st.markdown(
+        f"""<div style="display:flex;gap:14px;align-items:center;
+              background:{NAVY_CARD};border:1px solid {BORDER};
+              border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+          <div style="flex:0 0 48px;height:48px;border-radius:50%;
+            background:{ACCENT};color:#06121e;font-weight:700;
+            font-size:1.3rem;display:flex;align-items:center;
+            justify-content:center;">{initials}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:1.15rem;font-weight:700;color:{WHITE};
+              letter-spacing:-0.3px;">{head.name}</div>
+            <div style="font-size:0.78rem;color:{WHITE_DIM};">
+              {head.title} &middot; {len(ctx.get('tickers') or [])} names in screen</div>
+          </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    hist_key = f"chat_hist_{sector_key}"
+    history = st.session_state.setdefault(hist_key, [
+        {"role": "assistant", "text": head.intro},
+    ])
+
+    # Transcript
+    for msg in history:
+        avatar = initials if msg["role"] == "assistant" else "🧑"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["text"])
+
+    # Input
+    prompt = st.chat_input(f"Ask {head.name} anything…", key=f"chat_in_{sector_key}")
+    if prompt:
+        history.append({"role": "user", "text": prompt})
+        try:
+            answer = head_reply(head, prompt, ctx)
+        except Exception as e:
+            answer = f"_Something jammed in my reply pipe: {e}_"
+        history.append({"role": "assistant", "text": answer})
+        st.session_state[hist_key] = history
+        st.rerun()
+
+    # Footer controls
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        if st.button("Clear transcript", key=f"chat_clear_{sector_key}",
+                     use_container_width=True):
+            st.session_state[hist_key] = [
+                {"role": "assistant", "text": head.intro},
+            ]
+            st.rerun()
+    with c2:
+        if st.button("Close", key=f"chat_close_{sector_key}",
+                     use_container_width=True, type="primary"):
+            st.session_state.show_chat = None
+            st.rerun()
+
+
+# =============================================================================
 # Today's top moves
 # =============================================================================
 def render_top_movers() -> None:
@@ -1546,6 +1621,7 @@ def main() -> None:
 
     def _reset_view():
         st.session_state.view = "sector"
+        st.session_state.show_chat = None
 
     category_keys = list(SECTORS.keys()) + ["Trading Journal"]
 
@@ -1675,7 +1751,10 @@ def main() -> None:
         "Real Estate":            real_estate_universe,
     }[main_cat]
 
-    st.markdown(
+    head = SECTOR_HEADS.get(main_cat)
+    hcols = st.columns([7, 3]) if head else None
+    target = hcols[0] if hcols else st
+    target.markdown(
         f"""<div style="margin-bottom:6px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
             text-transform:uppercase;letter-spacing:1px;">
@@ -1685,6 +1764,17 @@ def main() -> None:
           letter-spacing:-0.5px;margin-bottom:20px;">Sierra Trading</div>""",
         unsafe_allow_html=True,
     )
+    if head and hcols is not None:
+        with hcols[1]:
+            st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+            if st.button(
+                f"💬 Chat with {head.name}",
+                key=f"chat_open_{main_cat}",
+                use_container_width=True,
+                help=f"{head.title} — {head.persona}",
+            ):
+                st.session_state.show_chat = main_cat
+                st.rerun()
 
     with st.spinner("Loading market data…"):
         by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
@@ -1703,6 +1793,25 @@ def main() -> None:
         record_snapshot(main_cat, all_quotes)
     except Exception:
         pass
+
+    # Build chat context for the sector head (cheap; cached on session)
+    if head is not None:
+        try:
+            from changelog import recent_events as _recent_events
+            sub_folders = list(by_cat.keys())
+            tickers_list = sorted({q.ticker for syms in by_cat.values() for q in syms})
+            st.session_state[f"chat_ctx_{main_cat}"] = {
+                "tickers": tickers_list,
+                "info": uni_mod.INFO,
+                "sub_folders": sub_folders,
+                "changelog": _recent_events(limit=30),
+                "movers": [],   # populated when user visits Top Movers
+            }
+        except Exception:
+            pass
+
+    if st.session_state.get("show_chat") == main_cat:
+        sector_head_chat_dialog(main_cat)
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
 
