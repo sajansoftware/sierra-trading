@@ -523,7 +523,7 @@ def catalyst_dialog(ticker: str) -> None:
         f"text-align:{align};'>{h}</th>"
         for h, align in [
             ("Date","left"), ("PM Low","right"), ("PM High","right"),
-            ("Upside","right"), ("Type","left"), ("Sentiment","left"),
+            ("Upside","right"), ("Type","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
     )
@@ -611,7 +611,6 @@ def catalyst_dialog(ticker: str) -> None:
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>+{up:.1f}%</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{sent_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>{catalyst_text}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
