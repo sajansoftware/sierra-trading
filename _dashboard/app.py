@@ -35,6 +35,7 @@ from data import (
 )
 from changelog import record_snapshot, recent_events
 from sector_heads import HEADS as SECTOR_HEADS, reply as head_reply
+from managing_directors import MDS, reply as md_reply
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -947,18 +948,45 @@ def sector_head_chat_dialog(sector_key: str) -> None:
         {"role": "assistant", "text": head.intro},
     ])
 
-    # Transcript
+    # Transcript (scrollable card list)
+    bubbles: list[str] = []
     for msg in history:
-        avatar = initials if msg["role"] == "assistant" else "🧑"
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["text"])
+        is_user = msg["role"] == "user"
+        align = "flex-end" if is_user else "flex-start"
+        bg = ACCENT if is_user else NAVY_HOVER
+        col = "#06121e" if is_user else WHITE
+        badge = "You" if is_user else head.name
+        bubbles.append(
+            f"<div style='display:flex;justify-content:{align};margin:6px 0;'>"
+            f"<div style='max-width:78%;background:{bg};color:{col};"
+            f"border-radius:12px;padding:10px 14px;font-size:0.88rem;"
+            f"line-height:1.45;'>"
+            f"<div style='font-size:0.65rem;opacity:0.7;margin-bottom:3px;'>"
+            f"{badge}</div>"
+            f"<div>{msg['text']}</div></div></div>"
+        )
+    st.markdown(
+        f"<div style='max-height:380px;overflow-y:auto;padding:6px 4px;"
+        f"background:{NAVY};border:1px solid {BORDER};"
+        f"border-radius:8px;margin-bottom:10px;'>"
+        + "".join(bubbles) + "</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Input
-    prompt = st.chat_input(f"Ask {head.name} anything…", key=f"chat_in_{sector_key}")
-    if prompt:
-        history.append({"role": "user", "text": prompt})
+    # Input — st.chat_input can't be used inside dialogs, so use a form.
+    with st.form(key=f"chat_form_{sector_key}", clear_on_submit=True):
+        prompt = st.text_input(
+            f"Ask {head.name} anything…",
+            key=f"chat_in_{sector_key}",
+            label_visibility="collapsed",
+            placeholder=f"Ask {head.name} anything…",
+        )
+        send = st.form_submit_button("Send", type="primary",
+                                     use_container_width=True)
+    if send and prompt.strip():
+        history.append({"role": "user", "text": prompt.strip()})
         try:
-            answer = head_reply(head, prompt, ctx)
+            answer = head_reply(head, prompt.strip(), ctx)
         except Exception as e:
             answer = f"_Something jammed in my reply pipe: {e}_"
         history.append({"role": "assistant", "text": answer})
@@ -976,9 +1004,184 @@ def sector_head_chat_dialog(sector_key: str) -> None:
             st.rerun()
     with c2:
         if st.button("Close", key=f"chat_close_{sector_key}",
-                     use_container_width=True, type="primary"):
+                     use_container_width=True):
             st.session_state.show_chat = None
             st.rerun()
+
+
+# =============================================================================
+# Managing Director chat dialog
+# =============================================================================
+@st.dialog("Managing Director", width="large")
+def md_chat_dialog(md_name: str) -> None:
+    md = MDS.get(md_name)
+    if md is None:
+        st.warning("MD not found.")
+        return
+
+    ctx = st.session_state.get("md_ctx", {})
+    initials = md.name[:1].upper()
+
+    st.markdown(
+        f"""<div style="display:flex;gap:14px;align-items:center;
+              background:{NAVY_CARD};border:1px solid {BORDER};
+              border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+          <div style="flex:0 0 52px;height:52px;border-radius:50%;
+            background:{ACCENT};color:#06121e;font-weight:700;
+            font-size:1.4rem;display:flex;align-items:center;
+            justify-content:center;">{initials}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:1.2rem;font-weight:700;color:{WHITE};
+              letter-spacing:-0.3px;">{md.name}</div>
+            <div style="font-size:0.8rem;color:{WHITE_DIM};">{md.title}</div>
+          </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    hist_key = f"md_hist_{md_name}"
+    history = st.session_state.setdefault(hist_key, [
+        {"role": "assistant", "text": md.intro},
+    ])
+
+    bubbles: list[str] = []
+    for msg in history:
+        is_user = msg["role"] == "user"
+        align = "flex-end" if is_user else "flex-start"
+        bg = ACCENT if is_user else NAVY_HOVER
+        col = "#06121e" if is_user else WHITE
+        badge = "You" if is_user else md.name
+        bubbles.append(
+            f"<div style='display:flex;justify-content:{align};margin:6px 0;'>"
+            f"<div style='max-width:78%;background:{bg};color:{col};"
+            f"border-radius:12px;padding:10px 14px;font-size:0.88rem;"
+            f"line-height:1.45;white-space:pre-wrap;'>"
+            f"<div style='font-size:0.65rem;opacity:0.7;margin-bottom:3px;'>"
+            f"{badge}</div>"
+            f"<div>{msg['text']}</div></div></div>"
+        )
+    st.markdown(
+        f"<div style='max-height:380px;overflow-y:auto;padding:6px 4px;"
+        f"background:{NAVY};border:1px solid {BORDER};"
+        f"border-radius:8px;margin-bottom:10px;'>"
+        + "".join(bubbles) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.form(key=f"md_form_{md_name}", clear_on_submit=True):
+        prompt = st.text_input(
+            f"Ask {md.name} anything…",
+            key=f"md_in_{md_name}",
+            label_visibility="collapsed",
+            placeholder=f"Ask {md.name} anything…",
+        )
+        send = st.form_submit_button("Send", type="primary",
+                                     use_container_width=True)
+    if send and prompt.strip():
+        history.append({"role": "user", "text": prompt.strip()})
+        try:
+            answer = md_reply(md, prompt.strip(), ctx)
+        except Exception as e:
+            answer = f"_Reply error: {e}_"
+        history.append({"role": "assistant", "text": answer})
+        st.session_state[hist_key] = history
+        st.rerun()
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        if st.button("Clear transcript", key=f"md_clear_{md_name}",
+                     use_container_width=True):
+            st.session_state[hist_key] = [
+                {"role": "assistant", "text": md.intro},
+            ]
+            st.rerun()
+    with c2:
+        if st.button("Close", key=f"md_close_{md_name}",
+                     use_container_width=True):
+            st.session_state.show_md = None
+            st.rerun()
+
+
+# =============================================================================
+# Manage AI Employees page
+# =============================================================================
+def render_manage_employees() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">AI Employees / Manage</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Front Office</div>
+        <div style="font-size:0.88rem;color:{WHITE_DIM};margin-bottom:22px;">
+          Speak to the managing directors. Each MD owns a horizontal
+          slice of the firm and supervises the line agents under them
+          (sector heads, Aidan, Mia, and the planned risk / execution
+          desks).</div>""",
+        unsafe_allow_html=True,
+    )
+
+    # Build context for MD chats
+    from changelog import recent_events as _recent_events
+    changelog = _recent_events(limit=40)
+    sectors_covered = len({e.get("sector") for e in changelog})
+    total_tickers = 0
+    # Cheap aggregate count across sector chat contexts the user has touched
+    for key in st.session_state.keys():
+        if isinstance(key, str) and key.startswith("chat_ctx_"):
+            ctx = st.session_state.get(key) or {}
+            total_tickers += len(ctx.get("tickers") or [])
+    st.session_state.md_ctx = {
+        "changelog": changelog,
+        "sectors_covered": sectors_covered,
+        "total_tickers": total_tickers,
+    }
+
+    # Grid of MD cards
+    md_list = list(MDS.values())
+    cols_per_row = 2
+    for i in range(0, len(md_list), cols_per_row):
+        row = md_list[i:i + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for col, md in zip(cols, row):
+            with col:
+                initials = md.name[:1].upper()
+                reports_str = " · ".join(md.reports[:3]) + (
+                    "" if len(md.reports) <= 3 else f" +{len(md.reports)-3}"
+                )
+                st.markdown(
+                    f"""<div style="background:{NAVY_CARD};
+                          border:1px solid {BORDER};border-radius:10px;
+                          padding:16px;margin-bottom:14px;min-height:170px;">
+                      <div style="display:flex;gap:12px;align-items:center;
+                          margin-bottom:10px;">
+                        <div style="flex:0 0 44px;height:44px;border-radius:50%;
+                          background:{ACCENT};color:#06121e;font-weight:700;
+                          font-size:1.15rem;display:flex;align-items:center;
+                          justify-content:center;">{initials}</div>
+                        <div style="flex:1;min-width:0;">
+                          <div style="font-size:1rem;font-weight:700;
+                            color:{WHITE};letter-spacing:-0.3px;">{md.name}</div>
+                          <div style="font-size:0.75rem;color:{WHITE_DIM};">
+                            {md.title}</div>
+                        </div>
+                      </div>
+                      <div style="font-size:0.78rem;color:{WHITE_DIM};
+                        line-height:1.45;margin-bottom:8px;">
+                        Supervises: {reports_str}</div>
+                      <div style="font-size:0.72rem;color:{WHITE_MUTE};
+                        font-style:italic;">{md.persona}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+                if st.button(f"💬 Speak to {md.name}",
+                             key=f"md_btn_{md.name}",
+                             use_container_width=True):
+                    st.session_state.show_md = md.name
+                    st.rerun()
+
+    if st.session_state.get("show_md"):
+        md_chat_dialog(st.session_state.show_md)
 
 
 # =============================================================================
@@ -1717,6 +1920,16 @@ def main() -> None:
                 st.session_state.view = "mia"
                 st.rerun()
 
+            if st.button(
+                "🏢 Manage",
+                use_container_width=True,
+                key="manage_btn",
+                type="primary" if st.session_state.view == "manage" else "secondary",
+                help="Speak to the managing directors",
+            ):
+                st.session_state.view = "manage"
+                st.rerun()
+
     if is_journal:
         render_journal()
         return
@@ -1731,6 +1944,10 @@ def main() -> None:
 
     if st.session_state.view == "mia":
         render_mia_coach()
+        return
+
+    if st.session_state.view == "manage":
+        render_manage_employees()
         return
 
     if st.session_state.view == "ipo":
