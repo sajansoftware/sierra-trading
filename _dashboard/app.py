@@ -33,7 +33,7 @@ from data import (
     short_blurb,
     tv_num,
 )
-from changelog import record_snapshot, recent_changes
+from changelog import record_snapshot, recent_events
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -823,52 +823,87 @@ def render_journal() -> None:
 
 
 # =============================================================================
-# Sidebar changelog
+# Changelog dialog
 # =============================================================================
-def _render_changelog_panel() -> None:
-    """Sidebar panel showing the most recent ticker adds / drops produced
-    by the $1–$20 + float<20M screen, accumulated across sector loads."""
-    entries = recent_changes(limit=10)
+@st.dialog("Universe Changelog", width="large")
+def changelog_dialog() -> None:
+    """Modal showing the 10 most recent ticker adds / drops with reason."""
+    events = recent_events(limit=10)
+
     st.markdown(
-        f"""<div style="margin-top:14px;padding-top:12px;
-          border-top:1px solid {BORDER};">
-          <div style="font-size:0.7rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;
-            margin-bottom:6px;">Changelog</div>
+        f"""<div style="margin-bottom:10px;">
+          <div style="font-size:0.78rem;color:{WHITE_DIM};line-height:1.5;">
+            Tracks tickers entering or exiting the screen
+            (<b>${MIN_PRICE:.0f}–${MAX_PRICE:.0f}</b> &middot;
+            <b>float &lt; 20M</b>). Updated each time a sector loads.
+          </div>
         </div>""",
         unsafe_allow_html=True,
     )
-    if not entries:
-        st.caption("No ticker changes recorded yet. Visit sector pages "
-                   "to start tracking adds and drops.")
-        return
-    rows: list[str] = []
-    for e in entries:
-        ts = e.get("ts", "")
-        sector = e.get("sector", "")
-        added = e.get("added") or []
-        removed = e.get("removed") or []
-        bits: list[str] = []
-        if added:
-            bits.append(
-                f"<span style='color:{GOOD};'>+{len(added)}</span> "
-                f"<span style='color:{WHITE_DIM};font-size:0.75rem;'>"
-                f"{', '.join(added[:6])}{'…' if len(added) > 6 else ''}</span>"
-            )
-        if removed:
-            bits.append(
-                f"<span style='color:{DANGER};'>−{len(removed)}</span> "
-                f"<span style='color:{WHITE_DIM};font-size:0.75rem;'>"
-                f"{', '.join(removed[:6])}{'…' if len(removed) > 6 else ''}</span>"
-            )
-        rows.append(
-            f"<div style='padding:6px 0;border-bottom:1px solid {BORDER};'>"
-            f"<div style='font-size:0.7rem;color:{WHITE_MUTE};'>"
-            f"{ts} &middot; {sector}</div>"
-            f"<div style='font-size:0.8rem;line-height:1.4;'>"
-            f"{' &nbsp; '.join(bits)}</div></div>"
+
+    if not events:
+        st.info(
+            "No changes recorded yet. Browse sector pages — the first "
+            "visit seeds the snapshot, and every subsequent qualifying "
+            "change is logged here."
         )
-    st.markdown("".join(rows), unsafe_allow_html=True)
+        return
+
+    cards: list[str] = []
+    for e in events:
+        sym = e.get("sym", "")
+        sector = e.get("sector", "")
+        ts = e.get("ts", "")
+        action = e.get("action", "")
+        reason = e.get("reason", "")
+        price = e.get("price")
+        fl = e.get("float_shares")
+
+        is_add = action == "added"
+        accent_col = GOOD if is_add else DANGER
+        accent_bg = "rgba(34,197,94,0.10)" if is_add else "rgba(239,68,68,0.10)"
+        glyph = "▲ ADDED" if is_add else "▼ REMOVED"
+
+        meta_bits: list[str] = []
+        if price is not None:
+            try:
+                meta_bits.append(f"${float(price):.2f}")
+            except Exception:
+                pass
+        if fl:
+            try:
+                meta_bits.append(f"float {float(fl)/1e6:.1f}M")
+            except Exception:
+                pass
+        meta_str = " &middot; ".join(meta_bits) if meta_bits else "&nbsp;"
+
+        cards.append(
+            f"""<div style="display:flex;gap:14px;align-items:stretch;
+                 background:{NAVY_CARD};border:1px solid {BORDER};
+                 border-left:4px solid {accent_col};border-radius:8px;
+                 padding:12px 14px;margin-bottom:10px;">
+              <div style="flex:0 0 84px;">
+                <div style="font-size:0.65rem;font-weight:700;
+                  letter-spacing:1px;color:{accent_col};
+                  background:{accent_bg};border-radius:4px;
+                  padding:3px 6px;text-align:center;
+                  margin-bottom:6px;">{glyph}</div>
+                <div style="font-size:1.05rem;font-weight:700;
+                  color:{WHITE};letter-spacing:-0.3px;">{sym}</div>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:0.7rem;color:{WHITE_MUTE};
+                  text-transform:uppercase;letter-spacing:0.5px;
+                  margin-bottom:4px;">{sector} &middot; {ts}</div>
+                <div style="font-size:0.88rem;color:{WHITE_DIM};
+                  line-height:1.45;margin-bottom:4px;">{reason}</div>
+                <div style="font-size:0.72rem;color:{WHITE_MUTE};">
+                  {meta_str}</div>
+              </div>
+            </div>"""
+        )
+
+    st.markdown("".join(cards), unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -1504,6 +1539,11 @@ def main() -> None:
         st.session_state.selected_ticker = None
         catalyst_dialog(pending_dialog)
 
+    # Changelog dialog (single-shot consume to mirror catalyst pattern)
+    if st.session_state.get("show_changelog"):
+        st.session_state.show_changelog = False
+        changelog_dialog()
+
     def _reset_view():
         st.session_state.view = "sector"
 
@@ -1566,8 +1606,12 @@ def main() -> None:
                 st.cache_data.clear()
                 st.rerun()
 
-            # ---------- Changelog ----------
-            _render_changelog_panel()
+            if st.button(
+                "📋 Changelog",
+                use_container_width=True,
+                key="changelog_btn",
+            ):
+                st.session_state.show_changelog = True
 
             # ---------- AI Employees ----------
             st.markdown(
@@ -1648,8 +1692,15 @@ def main() -> None:
     # Snapshot the qualifying tickers for this sector so the sidebar
     # changelog can report adds/drops between loads.
     try:
-        all_qual = sorted({q.ticker for syms in by_cat.values() for q in syms})
-        record_snapshot(main_cat, all_qual)
+        all_quotes: list[Quote] = []
+        seen: set[str] = set()
+        for syms in by_cat.values():
+            for q in syms:
+                if q.ticker in seen:
+                    continue
+                seen.add(q.ticker)
+                all_quotes.append(q)
+        record_snapshot(main_cat, all_quotes)
     except Exception:
         pass
 
