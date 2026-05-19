@@ -448,6 +448,12 @@ def fetch_premarket_catalysts(
     except Exception:
         filings_idx = {}
 
+    try:
+        from sentiment import classify_sentiment
+    except Exception:
+        def classify_sentiment(_title: str) -> str:
+            return "Neutral"
+
     rows: list[dict] = []
     for d, day_bars in pm.groupby(pm.index.date):
         if day_bars.empty:
@@ -457,76 +463,116 @@ def fetch_premarket_catalysts(
             pm_high_ts = day_bars["High"].idxmax()
         except Exception:
             continue
-        # Price at 7:00 AM ET. Try the exact 7:00 bar first, then widen
-        # the window so every catalyst row gets a price even when the
-        # ticker had sparse pre-market activity at that exact minute.
-        price_at_7am = None
-        try:
-            for window in (("07:00", "07:04"), ("07:00", "07:14"),
-                           ("07:00", "07:29"), ("06:30", "07:59")):
-                w = day_bars.between_time(window[0], window[1])
-                if not w.empty:
-                    # Bar whose START is closest to 7:00 ET
-                    seven_target = w.index[0].replace(hour=7, minute=0, second=0)
-                    nearest_idx = (w.index - seven_target).map(abs).argmin()
-                    price_at_7am = float(w.iloc[nearest_idx]["Close"])
-                    break
-            # Last resort: nearest bar to 7:00 across the entire PM window
-            if price_at_7am is None and not day_bars.empty:
-                seven_target = day_bars.index[0].replace(hour=7, minute=0, second=0)
-                nearest_idx = (day_bars.index - seven_target).map(abs).argmin()
-                price_at_7am = float(day_bars.iloc[nearest_idx]["Close"])
-        except Exception:
-            pass
+
         pc = prior_close(d)
         if pc is None or pc <= 0:
             continue
-        upside_pct = (pm_high - pc) / pc * 100.0
-        if upside_pct < min_upside_pct:
+        # Initial filter (vs prior close) to qualify the day as a catalyst.
+        if (pm_high - pc) / pc * 100.0 < min_upside_pct:
             continue
         # Apply $1-$20 filter using the day's regular-session close
         day_close = daily_close_by_date.get(d, pm_high)
         if not (min_price <= day_close <= max_price):
             continue
 
-        # Headline enrichment (same day or 1 day before, since pre-market
-        # events often follow overnight news)
-        title = link = source = ctype = ""
+        # Collect ALL news sources that have a headline on or near this
+        # catalyst day. Need to know the earliest news time so PM Low can
+        # be calculated for the pre-news window. Search ±2 days.
+        all_sources: list[dict] = []
+        seen_titles: set[str] = set()
         for offset in (0, -1, 1, -2, 2):
             for item in news_by_date.get(d + timedelta(days=offset), []):
-                title = item["title"]
-                link = item["link"]
-                source = item["source"]
-                ctype = classify_catalyst(title)
+                ttl = (item.get("title") or "").strip()
+                if not ttl or ttl in seen_titles:
+                    continue
+                seen_titles.add(ttl)
+                all_sources.append(item)
+        # SEC EDGAR can corroborate
+        sec_match: dict | None = None
+        for offset in range(-3, 6):
+            fls = filings_idx.get(d + timedelta(days=offset), [])
+            if fls:
+                sec_match = fls[0]
                 break
-            if title:
-                break
-        if not title:
-            for offset in range(-3, 6):
-                fls = filings_idx.get(d + timedelta(days=offset), [])
-                if fls:
-                    f = fls[0]
-                    title = f["description"]
-                    link = f["link"]
-                    source = "SEC EDGAR"
-                    ctype = f["type"]
-                    break
-        if not ctype:
-            ctype = "No news"
-        if not source:
+
+        # Choose primary headline + secondary source
+        if all_sources:
+            primary = all_sources[0]
+            title = primary["title"]
+            link = primary["link"]
+            source = primary["source"]
+        elif sec_match:
+            title = sec_match["description"]
+            link = sec_match["link"]
+            source = "SEC EDGAR"
+        else:
+            title = link = ""
             source = "—"
 
+        # Distinct corroborating sources (drop duplicates by source name)
+        distinct_source_names: list[str] = []
+        for s in all_sources:
+            sn = s.get("source") or ""
+            if sn and sn not in distinct_source_names:
+                distinct_source_names.append(sn)
+        if sec_match and "SEC EDGAR" not in distinct_source_names:
+            distinct_source_names.append("SEC EDGAR")
+        sources_count = len(distinct_source_names)
+        secondary_source = (distinct_source_names[1]
+                            if sources_count >= 2 else "")
+
+        # PM Low: lowest Low between 4:00 AM and the bar of the news
+        # catalyst. We use the earliest available news timestamp on the
+        # catalyst day; fall back to the PM-High bar timestamp when news
+        # time is unknown. Result is the lowest pre-news price.
+        news_time = None
+        for s in all_sources:
+            dt = s.get("datetime")
+            if isinstance(dt, datetime) and dt.date() == d:
+                if news_time is None or dt < news_time:
+                    news_time = dt
+        try:
+            if news_time is not None:
+                try:
+                    nt_et = news_time.astimezone(pm.index.tz)
+                except Exception:
+                    nt_et = news_time
+                before_news = day_bars[day_bars.index < nt_et]
+                if not before_news.empty:
+                    pm_low_window = before_news
+                else:
+                    pm_low_window = day_bars[day_bars.index <= pm_high_ts]
+            else:
+                # No news timestamp - use everything up to (and including)
+                # the PM High bar as the pre-catalyst window.
+                pm_low_window = day_bars[day_bars.index <= pm_high_ts]
+            pm_low = float(pm_low_window["Low"].min())
+        except Exception:
+            pm_low = float(day_bars["Low"].min())
+
+        # Upside formula per spec: (PM High - PM Low) / PM Low * 100
+        if pm_low and pm_low > 0:
+            upside_pct = (pm_high - pm_low) / pm_low * 100.0
+        else:
+            upside_pct = 0.0
+
+        sentiment = classify_sentiment(title) if title else "Neutral"
+        unverified = sources_count < 2
+
         rows.append({
-            "date":         d,
-            "price_7am":    price_at_7am,
-            "pm_high":      pm_high,
-            "pm_high_time": pm_high_ts.strftime("%I:%M %p ET").lstrip("0"),
-            "prior_close":  pc,
-            "upside_pct":   upside_pct,
-            "type":         ctype,
-            "title":        title,
-            "link":         link,
-            "source":       source,
+            "date":             d,
+            "pm_low":           pm_low,
+            "pm_high":          pm_high,
+            "pm_high_time":     pm_high_ts.strftime("%I:%M %p ET").lstrip("0"),
+            "prior_close":      pc,
+            "upside_pct":       upside_pct,
+            "sentiment":        sentiment,
+            "title":            title,
+            "link":             link,
+            "source":           source,
+            "secondary_source": secondary_source,
+            "sources_count":    sources_count,
+            "unverified":       unverified,
         })
 
     rows.sort(key=lambda r: r["date"], reverse=True)

@@ -323,8 +323,33 @@ def inject_theme() -> None:
 # Helpers
 # =============================================================================
 def load_description(dir_path: Path) -> str:
+    """Legacy plain-text loader (kept for backwards compat)."""
     p = dir_path / "description.md"
     return p.read_text(encoding="utf-8") if p.exists() else ""
+
+
+def load_description_parts(dir_path: Path) -> tuple[str, list[str]]:
+    """Parse description.md into (paragraph_text, [representative_areas]).
+
+    Strips markdown # / ## headers (no inline taxonomy labels).
+    Lines starting with '-' or '*' become area entries.
+    Remaining non-empty lines fold into the paragraph.
+    """
+    p = dir_path / "description.md"
+    if not p.exists():
+        return "", []
+    raw = p.read_text(encoding="utf-8")
+    para: list[str] = []
+    areas: list[str] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(("- ", "* ", "• ")):
+            areas.append(line[2:].strip())
+        else:
+            para.append(line)
+    return " ".join(para), areas
 
 
 def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
@@ -479,19 +504,13 @@ def catalyst_dialog(ticker: str) -> None:
         rows = fetch_premarket_catalysts(ticker)
 
     st.markdown(
-        f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};'>"
-        f"{ticker} — Pre-Market Catalysts</div>"
-        f"<div style='color:{WHITE_MUTE};font-size:0.78rem;margin-bottom:14px;'>"
-        f"Pre-market window 4:00 AM – 9:29 AM ET &nbsp;·&nbsp; "
-        f"last 60 days (yfinance intraday limit)</div>",
+        f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};"
+        f"margin-bottom:14px;'>{ticker} — Pre-Market Catalysts</div>",
         unsafe_allow_html=True,
     )
 
     if not rows:
-        st.info(
-            "No qualifying pre-market catalyst days in the last 60 days "
-            "(close $1–$20, PM upside ≥ 30%)."
-        )
+        st.info("No pre-market catalyst days found for this ticker.")
         if st.button("Close", key="close_empty"):
             _close_dialog()
             st.rerun()
@@ -503,47 +522,73 @@ def catalyst_dialog(ticker: str) -> None:
         f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Date","left"), ("Price @ 7:00 AM","right"), ("PM High","right"),
+            ("Date","left"), ("PM Low","right"), ("PM High","right"),
             ("Upside","right"), ("Type","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
     )
 
+    SENT_COLOR = {
+        "Bullish": "#22c55e",
+        "Bearish": "#ef4444",
+        "Neutral": "#64748b",
+    }
+
     body_rows = []
     for r in rows:
         date_str = r["date"].strftime("%b %d, %Y")
-        type_label = r["type"]
-        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        sent_label = r.get("sentiment") or "Neutral"
+        sent_col = SENT_COLOR.get(sent_label, "#64748b")
+        sent_badge = (
+            f"<span style='background:{sent_col};color:#06121e;"
+            f"font-weight:700;font-size:0.7rem;padding:2px 10px;"
+            f"border-radius:4px;white-space:nowrap;'>{sent_label}</span>"
         )
         catalyst_text = (
             r["title"] if r["title"]
             else f"<span style='color:#64748b;'>—</span>"
         )
-        source_label = r.get("source") or "—"
-        if r["link"] and source_label != "—":
-            source_html = (
+        # Source cell: primary source link + secondary source corroboration
+        # OR an explicit Unverified badge when only one source is available.
+        primary_source = r.get("source") or "—"
+        secondary = r.get("secondary_source") or ""
+        unverified = r.get("unverified", False)
+        if r["link"] and primary_source != "—":
+            primary_html = (
                 f"<a href='{r['link']}' target='_blank' "
                 f"style='color:{ACCENT};text-decoration:none;font-size:0.78rem;"
-                f"white-space:nowrap;'>{source_label} ↗</a>"
+                f"white-space:nowrap;'>{primary_source} ↗</a>"
             )
         else:
-            source_html = (
+            primary_html = (
                 f"<span style='color:#64748b;font-size:0.78rem;'>"
-                f"{source_label}</span>"
+                f"{primary_source}</span>"
             )
+        if unverified:
+            verify_html = (
+                f"<div style='margin-top:2px;display:inline-block;"
+                f"background:#f97316;color:#06121e;font-weight:700;"
+                f"font-size:0.65rem;padding:1px 6px;border-radius:3px;"
+                f"text-transform:uppercase;'>Unverified</div>"
+            )
+        elif secondary:
+            verify_html = (
+                f"<div style='margin-top:2px;color:{WHITE_MUTE};"
+                f"font-size:0.7rem;'>+ {secondary}</div>"
+            )
+        else:
+            verify_html = ""
+        source_html = primary_html + verify_html
+
         up = r["upside_pct"]
         up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
-        if r.get("price_7am") is not None:
-            price_7am_cell = (
-                f"<div style='color:{WHITE_DIM};font-weight:500;'>"
-                f"${r['price_7am']:.2f}</div>"
-            )
-        else:
-            price_7am_cell = f"<div style='color:#64748b;'>—</div>"
+        pm_low = r.get("pm_low")
+        pm_low_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
+            f"${pm_low:.2f}</div>"
+            if pm_low is not None
+            else f"<div style='color:#64748b;'>—</div>"
+        )
         pm_high_cell = (
             f"<div style='color:{WHITE};font-weight:600;'>${r['pm_high']:.2f}</div>"
             f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_high_time']}</div>"
@@ -553,12 +598,12 @@ def catalyst_dialog(ticker: str) -> None:
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>{date_str}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{price_7am_cell}</td>"
+            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>+{up:.1f}%</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{sent_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>{catalyst_text}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
@@ -593,24 +638,31 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
         </div>""",
         unsafe_allow_html=True,
     )
-    desc = load_description(dir_path)
-    if desc:
+    para, areas = load_description_parts(dir_path)
+    if para:
         st.markdown(
             f"<div style='color:{WHITE_DIM};font-size:0.9rem;"
-            f"line-height:1.6;margin-bottom:18px;'>{desc}</div>",
+            f"line-height:1.6;margin-bottom:14px;'>{para}</div>",
+            unsafe_allow_html=True,
+        )
+    if areas:
+        cards = "".join(
+            f"<div style='background:{NAVY_CARD};border:1px solid {BORDER};"
+            f"border-radius:6px;padding:10px 14px;font-size:0.85rem;"
+            f"color:{WHITE};line-height:1.4;'>{a}</div>"
+            for a in areas
+        )
+        st.markdown(
+            f"<div style='display:grid;grid-template-columns:"
+            f"repeat(auto-fill,minmax(220px,1fr));gap:10px;"
+            f"margin-bottom:20px;'>{cards}</div>",
             unsafe_allow_html=True,
         )
 
     st.markdown(
-        f"""<div style="display:flex;justify-content:space-between;
-            align-items:baseline;margin-bottom:10px;">
+        f"""<div style="margin-bottom:10px;">
           <span style="font-size:1.05rem;font-weight:600;color:{WHITE};">
             Candidates ({len(rows)})
-          </span>
-          <span style="font-size:0.78rem;color:{WHITE_MUTE};">
-            ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
-            Float &lt; {MAX_FLOAT/1_000_000:.0f}M &nbsp;·&nbsp;
-            yfinance / 15m cache
           </span>
         </div>""",
         unsafe_allow_html=True,
@@ -620,7 +672,6 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
         st.info("No tickers in this category currently pass the filter.")
         return
 
-    st.caption("Click any ticker symbol to open its 5-year catalyst archive.")
     df = quotes_to_df(rows, info)
     st.markdown(style_table(df).to_html(), unsafe_allow_html=True)
 
@@ -770,13 +821,7 @@ def render_top_movers() -> None:
             text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">Today's Top Moves</div>
-        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Pre-market window 4:00 AM – 9:29 AM ET
-          &nbsp;·&nbsp; ${MIN_PRICE:.0f}–${MAX_PRICE:.0f}
-          &nbsp;·&nbsp; Float &lt; {MAX_FLOAT/1_000_000:.0f}M
-          &nbsp;·&nbsp; PM move vs prior close ≥ 20%
-          &nbsp;·&nbsp; 5-min cache</div>""",
+          letter-spacing:-0.5px;margin-bottom:18px;">Today's Top Moves</div>""",
         unsafe_allow_html=True,
     )
 
@@ -1306,10 +1351,7 @@ def render_ipo_calendar() -> None:
             text-transform:uppercase;letter-spacing:1px;">IPO Calendar</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">IPO Calendar</div>
-        <div style="font-size:0.9rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Proposed price ${MIN_PRICE:.0f}–${MAX_PRICE:.0f}
-          &nbsp;·&nbsp; NASDAQ &nbsp;·&nbsp; 6h cache</div>""",
+          letter-spacing:-0.5px;margin-bottom:18px;">IPO Calendar</div>""",
         unsafe_allow_html=True,
     )
 
@@ -1412,8 +1454,6 @@ def main() -> None:
             f"""<div style="padding:6px 0 14px;">
               <div style="font-size:1.15rem;font-weight:700;color:{WHITE};
                 letter-spacing:-0.3px;">Sierra Trading</div>
-              <div style="font-size:0.75rem;color:{WHITE_MUTE};margin-top:2px;">
-                Micro-float screener · yfinance</div>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -1462,13 +1502,9 @@ def main() -> None:
                 st.session_state.view = "ipo"
                 st.rerun()
 
-            if st.button("Refresh quotes", use_container_width=True, key="refresh_btn"):
+            if st.button("Refresh", use_container_width=True, key="refresh_btn"):
                 st.cache_data.clear()
-                st.toast("Quotes cache cleared.")
                 st.rerun()
-            st.caption(
-                f"Last load: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
 
             # ---------- AI Employees ----------
             st.markdown(
@@ -1532,7 +1568,6 @@ def main() -> None:
         "Healthcare Services":    healthcare_svc_universe,
     }[main_cat]
 
-    ticker_count = f"{len(uni_mod.INFO)} curated"
     st.markdown(
         f"""<div style="margin-bottom:6px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
@@ -1540,11 +1575,7 @@ def main() -> None:
             {main_cat} &nbsp;/&nbsp; {selected_label}</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:4px;">Sierra Trading</div>
-        <div style="font-size:0.9rem;color:{WHITE_DIM};margin-bottom:20px;">
-          ${MIN_PRICE:.0f}–${MAX_PRICE:.0f} &nbsp;·&nbsp;
-          Free float &lt; {MAX_FLOAT/1_000_000:.0f}M shares &nbsp;·&nbsp;
-          {ticker_count}</div>""",
+          letter-spacing:-0.5px;margin-bottom:20px;">Sierra Trading</div>""",
         unsafe_allow_html=True,
     )
 
