@@ -206,6 +206,7 @@ SECTOR_COMMUNICATION = "Communication_Services"
 SECTOR_STAPLES       = "Consumer_Staples"
 SECTOR_REALESTATE    = "Real_Estate"
 SECTOR_HCSVC         = "Healthcare_Services"
+SECTOR_UTILITIES     = "Utilities"
 
 # Map: NASDAQ industry string -> (sector_key, sub_sector_folder)
 # Comprehensive mapping built from observed NASDAQ industry vocabulary.
@@ -301,7 +302,7 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Integrated oil Companies":                (SECTOR_ENERGY, "Exploration_Production"),
     "Oilfield Services/Equipment":             (SECTOR_ENERGY, "Oilfield_Services_Equipment"),
     "Oil Refining/Marketing":                  (SECTOR_ENERGY, "Midstream"),
-    "Natural Gas Distribution":                (SECTOR_ENERGY, "Midstream"),
+    "Natural Gas Distribution":                (SECTOR_UTILITIES, "Gas_Utilities"),
     "Coal Mining":                             (SECTOR_ENERGY, "Coal_Uranium"),
     "Industrial Machinery/Components":         (SECTOR_INDUSTRIAL, "Machinery"),
     # ---------- Industrials ----------
@@ -317,7 +318,11 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Electrical Products":                     (SECTOR_INDUSTRIAL, "Electrical_Equipment"),
     "Metal Fabrications":                      (SECTOR_INDUSTRIAL, "Machinery"),
     "Environmental Services":                  (SECTOR_INDUSTRIAL, "Industrial_Services"),
-    "Water Supply":                            (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    # ---------- Utilities ----------
+    "Water Supply":                            (SECTOR_UTILITIES, "Water_Utilities"),
+    "Power Generation":                        (SECTOR_UTILITIES, "Electric_Utilities"),
+    "Electric Utilities: Central":             (SECTOR_UTILITIES, "Electric_Utilities"),
+    "Electric Utilities":                      (SECTOR_UTILITIES, "Electric_Utilities"),
 }
 
 # Keywords that nudge a ticker into Crypto-Adjacent sub-sector of Financials
@@ -341,7 +346,8 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
     "Miscellaneous":          SECTOR_INDUSTRIAL,   # most "misc" small-caps are industrial-ish
     "Communication Services": SECTOR_COMMUNICATION,
     "Communications":         SECTOR_COMMUNICATION,
-    "Public Utilities":       SECTOR_INDUSTRIAL,   # we don't have a Utilities sector yet
+    "Public Utilities":       SECTOR_UTILITIES,
+    "Utilities":              SECTOR_UTILITIES,
     "Transportation":         SECTOR_INDUSTRIAL,
 }
 

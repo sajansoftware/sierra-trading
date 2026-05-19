@@ -278,7 +278,6 @@ def fetch_top_movers(
                 hist.index = hist.index.tz_convert("America/New_York")
             except Exception:
                 pass
-            # Restrict to today's bars, then to the 4:00-9:29 ET pre-market.
             day_bars = hist[hist.index.date == today_et]
             if day_bars.empty:
                 return None
@@ -286,8 +285,19 @@ def fetch_top_movers(
             if pm_bars.empty:
                 return None
             pm_high = float(pm_bars["High"].max())
-            pm_low = float(pm_bars["Low"].min())
-            move_pct = (pm_high - q.previous_close) / q.previous_close * 100.0
+            try:
+                pm_high_ts = pm_bars["High"].idxmax()
+            except Exception:
+                return None
+            # PM Low = lowest Low from 4:00 AM up to and including the
+            # PM-High bar. This is the pre-catalyst window, mirroring
+            # the catalyst-dialog logic.
+            pre_high = pm_bars[pm_bars.index <= pm_high_ts]
+            pm_low = float(pre_high["Low"].min())
+            if pm_low <= 0:
+                return None
+            # Per spec: (PM High - PM Low) / PM Low * 100
+            move_pct = (pm_high - pm_low) / pm_low * 100.0
             if move_pct < min_pct:
                 return None
             return {

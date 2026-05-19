@@ -44,6 +44,8 @@ import comm_services_universe
 import consumer_staples_universe
 import real_estate_universe
 import healthcare_svc_universe
+import healthcare_universe
+import utilities_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 from aidan import audit_rows, QASuggestion
@@ -65,16 +67,11 @@ GOOD        = "#22c55e"
 WARN        = "#facc15"
 DANGER      = "#ef4444"
 
+# Sectors are ordered to match the GICS top-level classification:
+#   Technology, Communication Services, Consumer Discretionary,
+#   Consumer Staples, Health Care, Financials, Industrials, Energy,
+#   Materials, Utilities, Real Estate.
 SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
-    "Biotechnology": {
-        "Red_Medical_Pharmaceutical": ("Medical / Pharmaceutical", ACCENT, ROOT / "Biotechnology" / "Red_Medical_Pharmaceutical"),
-        "Green_Agricultural":         ("Agricultural",             ACCENT, ROOT / "Biotechnology" / "Green_Agricultural"),
-        "White_Industrial":           ("Industrial",               ACCENT, ROOT / "Biotechnology" / "White_Industrial"),
-        "Blue_Marine":                ("Marine",                   ACCENT, ROOT / "Biotechnology" / "Blue_Marine"),
-        "Grey_Environmental":         ("Environmental",            ACCENT, ROOT / "Biotechnology" / "Grey_Environmental"),
-        "Yellow_Food_Nutrition":      ("Food / Nutrition",         ACCENT, ROOT / "Biotechnology" / "Yellow_Food_Nutrition"),
-        "Gold_Bioinformatics":        ("Bioinformatics",           ACCENT, ROOT / "Biotechnology" / "Gold_Bioinformatics"),
-    },
     "Technology": {
         "Semiconductors":      ("Semiconductors",        ACCENT, ROOT / "Technology" / "Semiconductors"),
         "Software_SaaS":       ("Software / SaaS",       ACCENT, ROOT / "Technology" / "Software_SaaS"),
@@ -85,35 +82,17 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Fintech":             ("Fintech",               ACCENT, ROOT / "Technology" / "Fintech"),
         "Telecom":             ("Telecom",               ACCENT, ROOT / "Technology" / "Telecom"),
         "IT_Services":         ("IT Services",           ACCENT, ROOT / "Technology" / "IT_Services"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Technology" / "Other"),
+        "Other":               ("Other",                 ACCENT, ROOT / "Technology" / "Other"),
     },
-    "Energy": {
-        "Exploration_Production":      ("Exploration & Production",      ACCENT, ROOT / "Energy" / "Exploration_Production"),
-        "Oilfield_Services_Equipment": ("Oilfield Services & Equipment", ACCENT, ROOT / "Energy" / "Oilfield_Services_Equipment"),
-        "Midstream":                   ("Midstream",                     ACCENT, ROOT / "Energy" / "Midstream"),
-        "Renewable_Energy":            ("Renewable Energy",              ACCENT, ROOT / "Energy" / "Renewable_Energy"),
-        "Coal_Uranium":                ("Coal & Uranium",                ACCENT, ROOT / "Energy" / "Coal_Uranium"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Energy" / "Other"),
-    },
-    "Industrials": {
-        "Aerospace_Defense":        ("Aerospace & Defense",        ACCENT, ROOT / "Industrials" / "Aerospace_Defense"),
-        "Machinery":                ("Machinery",                  ACCENT, ROOT / "Industrials" / "Machinery"),
-        "Transportation_Logistics": ("Transportation & Logistics", ACCENT, ROOT / "Industrials" / "Transportation_Logistics"),
-        "Construction_Engineering": ("Construction & Engineering", ACCENT, ROOT / "Industrials" / "Construction_Engineering"),
-        "Electrical_Equipment":     ("Electrical Equipment",       ACCENT, ROOT / "Industrials" / "Electrical_Equipment"),
-        "Industrial_Services":      ("Industrial Services",        ACCENT, ROOT / "Industrials" / "Industrial_Services"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Industrials" / "Other"),
-    },
-    "Materials": {
-        "Precious_Metals":          ("Precious Metals",            ACCENT, ROOT / "Materials" / "Precious_Metals"),
-        "Battery_Critical_Metals":  ("Battery & Critical Metals",  ACCENT, ROOT / "Materials" / "Battery_Critical_Metals"),
-        "Rare_Earth_Strategic":     ("Rare Earth & Strategic",     ACCENT, ROOT / "Materials" / "Rare_Earth_Strategic"),
-        "Uranium":                  ("Uranium",                    ACCENT, ROOT / "Materials" / "Uranium"),
-        "Base_Metals":              ("Base Metals",                ACCENT, ROOT / "Materials" / "Base_Metals"),
-        "Steel_Iron":               ("Steel & Iron",               ACCENT, ROOT / "Materials" / "Steel_Iron"),
-        "Specialty_Chemicals":      ("Specialty Chemicals",        ACCENT, ROOT / "Materials" / "Specialty_Chemicals"),
-        "Construction_Materials":   ("Construction Materials",     ACCENT, ROOT / "Materials" / "Construction_Materials"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Materials" / "Other"),
+    "Communication Services": {
+        "Wireless_Wireline_Telecom": ("Wireless & Wireline Telecom", ACCENT, ROOT / "Communication_Services" / "Wireless_Wireline_Telecom"),
+        "Satellite_Towers":          ("Satellite & Towers",          ACCENT, ROOT / "Communication_Services" / "Satellite_Towers"),
+        "Media_Entertainment":       ("Media & Entertainment",       ACCENT, ROOT / "Communication_Services" / "Media_Entertainment"),
+        "Advertising_MarTech":       ("Advertising & MarTech",       ACCENT, ROOT / "Communication_Services" / "Advertising_MarTech"),
+        "Social_Gaming_Platforms":   ("Social & Gaming Platforms",   ACCENT, ROOT / "Communication_Services" / "Social_Gaming_Platforms"),
+        "Publishing_News":           ("Publishing & News",           ACCENT, ROOT / "Communication_Services" / "Publishing_News"),
+        "Streaming":                 ("Streaming",                   ACCENT, ROOT / "Communication_Services" / "Streaming"),
+        "Other":                     ("Other",                       ACCENT, ROOT / "Communication_Services" / "Other"),
     },
     "Consumer Discretionary": {
         "Retail_Specialty":         ("Retail & Specialty Stores",  ACCENT, ROOT / "Consumer_Discretionary" / "Retail_Specialty"),
@@ -126,6 +105,33 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "E_commerce":               ("E-commerce",                 ACCENT, ROOT / "Consumer_Discretionary" / "E_commerce"),
         "Other":                    ("Other",                      ACCENT, ROOT / "Consumer_Discretionary" / "Other"),
     },
+    "Consumer Staples": {
+        "Food_Beverage":         ("Food & Beverage",         ACCENT, ROOT / "Consumer_Staples" / "Food_Beverage"),
+        "Alt_Protein_Food_Tech": ("Alt-Protein & Food Tech", ACCENT, ROOT / "Consumer_Staples" / "Alt_Protein_Food_Tech"),
+        "Household_Products":    ("Household Products",      ACCENT, ROOT / "Consumer_Staples" / "Household_Products"),
+        "Personal_Care_Beauty":  ("Personal Care & Beauty",  ACCENT, ROOT / "Consumer_Staples" / "Personal_Care_Beauty"),
+        "Tobacco_Vape":          ("Tobacco & Vape",          ACCENT, ROOT / "Consumer_Staples" / "Tobacco_Vape"),
+        "Grocery_Distribution":  ("Grocery & Distribution",  ACCENT, ROOT / "Consumer_Staples" / "Grocery_Distribution"),
+        "Other":                 ("Other",                   ACCENT, ROOT / "Consumer_Staples" / "Other"),
+    },
+    "Health Care": {
+        # Biotech sub-sectors (7-color framework)
+        "Red_Medical_Pharmaceutical": ("Medical / Pharmaceutical", ACCENT, ROOT / "Biotechnology" / "Red_Medical_Pharmaceutical"),
+        "Green_Agricultural":         ("Agricultural",             ACCENT, ROOT / "Biotechnology" / "Green_Agricultural"),
+        "White_Industrial":           ("Industrial",               ACCENT, ROOT / "Biotechnology" / "White_Industrial"),
+        "Blue_Marine":                ("Marine",                   ACCENT, ROOT / "Biotechnology" / "Blue_Marine"),
+        "Grey_Environmental":         ("Environmental",            ACCENT, ROOT / "Biotechnology" / "Grey_Environmental"),
+        "Yellow_Food_Nutrition":      ("Food / Nutrition",         ACCENT, ROOT / "Biotechnology" / "Yellow_Food_Nutrition"),
+        "Gold_Bioinformatics":        ("Bioinformatics",           ACCENT, ROOT / "Biotechnology" / "Gold_Bioinformatics"),
+        # Healthcare services
+        "Hospitals_Health_Systems":   ("Hospitals & Health Systems", ACCENT, ROOT / "Healthcare_Services" / "Hospitals_Health_Systems"),
+        "Health_Insurance":           ("Health Insurance",           ACCENT, ROOT / "Healthcare_Services" / "Health_Insurance"),
+        "Healthcare_IT_Telehealth":   ("Healthcare IT & Telehealth", ACCENT, ROOT / "Healthcare_Services" / "Healthcare_IT_Telehealth"),
+        "Pharmacy_Distributors":      ("Pharmacy & Distributors",    ACCENT, ROOT / "Healthcare_Services" / "Pharmacy_Distributors"),
+        "Medical_Devices":            ("Medical Devices",            ACCENT, ROOT / "Healthcare_Services" / "Medical_Devices"),
+        "Dental_Vision_Hearing":      ("Dental, Vision & Hearing",   ACCENT, ROOT / "Healthcare_Services" / "Dental_Vision_Hearing"),
+        "Other":                      ("Other",                      ACCENT, ROOT / "Healthcare_Services" / "Other"),
+    },
     "Financials": {
         "Regional_Banks":           ("Regional Banks",             ACCENT, ROOT / "Financials" / "Regional_Banks"),
         "Investment_Banks_Brokers": ("Investment Banks & Brokers", ACCENT, ROOT / "Financials" / "Investment_Banks_Brokers"),
@@ -137,24 +143,41 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Crypto_Adjacent":          ("Crypto-Adjacent",            ACCENT, ROOT / "Financials" / "Crypto_Adjacent"),
         "Other":                    ("Other",                      ACCENT, ROOT / "Financials" / "Other"),
     },
-    "Communication Services": {
-        "Wireless_Wireline_Telecom": ("Wireless & Wireline Telecom", ACCENT, ROOT / "Communication_Services" / "Wireless_Wireline_Telecom"),
-        "Satellite_Towers":          ("Satellite & Towers",          ACCENT, ROOT / "Communication_Services" / "Satellite_Towers"),
-        "Media_Entertainment":       ("Media & Entertainment",       ACCENT, ROOT / "Communication_Services" / "Media_Entertainment"),
-        "Advertising_MarTech":       ("Advertising & MarTech",       ACCENT, ROOT / "Communication_Services" / "Advertising_MarTech"),
-        "Social_Gaming_Platforms":   ("Social & Gaming Platforms",   ACCENT, ROOT / "Communication_Services" / "Social_Gaming_Platforms"),
-        "Publishing_News":           ("Publishing & News",           ACCENT, ROOT / "Communication_Services" / "Publishing_News"),
-        "Streaming":                 ("Streaming",                   ACCENT, ROOT / "Communication_Services" / "Streaming"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Communication_Services" / "Other"),
+    "Industrials": {
+        "Aerospace_Defense":        ("Aerospace & Defense",        ACCENT, ROOT / "Industrials" / "Aerospace_Defense"),
+        "Machinery":                ("Machinery",                  ACCENT, ROOT / "Industrials" / "Machinery"),
+        "Transportation_Logistics": ("Transportation & Logistics", ACCENT, ROOT / "Industrials" / "Transportation_Logistics"),
+        "Construction_Engineering": ("Construction & Engineering", ACCENT, ROOT / "Industrials" / "Construction_Engineering"),
+        "Electrical_Equipment":     ("Electrical Equipment",       ACCENT, ROOT / "Industrials" / "Electrical_Equipment"),
+        "Industrial_Services":      ("Industrial Services",        ACCENT, ROOT / "Industrials" / "Industrial_Services"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Industrials" / "Other"),
     },
-    "Consumer Staples": {
-        "Food_Beverage":         ("Food & Beverage",         ACCENT, ROOT / "Consumer_Staples" / "Food_Beverage"),
-        "Alt_Protein_Food_Tech": ("Alt-Protein & Food Tech", ACCENT, ROOT / "Consumer_Staples" / "Alt_Protein_Food_Tech"),
-        "Household_Products":    ("Household Products",      ACCENT, ROOT / "Consumer_Staples" / "Household_Products"),
-        "Personal_Care_Beauty":  ("Personal Care & Beauty",  ACCENT, ROOT / "Consumer_Staples" / "Personal_Care_Beauty"),
-        "Tobacco_Vape":          ("Tobacco & Vape",          ACCENT, ROOT / "Consumer_Staples" / "Tobacco_Vape"),
-        "Grocery_Distribution":  ("Grocery & Distribution",  ACCENT, ROOT / "Consumer_Staples" / "Grocery_Distribution"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Consumer_Staples" / "Other"),
+    "Energy": {
+        "Exploration_Production":      ("Exploration & Production",      ACCENT, ROOT / "Energy" / "Exploration_Production"),
+        "Oilfield_Services_Equipment": ("Oilfield Services & Equipment", ACCENT, ROOT / "Energy" / "Oilfield_Services_Equipment"),
+        "Midstream":                   ("Midstream",                     ACCENT, ROOT / "Energy" / "Midstream"),
+        "Renewable_Energy":            ("Renewable Energy",              ACCENT, ROOT / "Energy" / "Renewable_Energy"),
+        "Coal_Uranium":                ("Coal & Uranium",                ACCENT, ROOT / "Energy" / "Coal_Uranium"),
+        "Other":                       ("Other",                         ACCENT, ROOT / "Energy" / "Other"),
+    },
+    "Materials": {
+        "Precious_Metals":          ("Precious Metals",            ACCENT, ROOT / "Materials" / "Precious_Metals"),
+        "Battery_Critical_Metals":  ("Battery & Critical Metals",  ACCENT, ROOT / "Materials" / "Battery_Critical_Metals"),
+        "Rare_Earth_Strategic":     ("Rare Earth & Strategic",     ACCENT, ROOT / "Materials" / "Rare_Earth_Strategic"),
+        "Uranium":                  ("Uranium",                    ACCENT, ROOT / "Materials" / "Uranium"),
+        "Base_Metals":              ("Base Metals",                ACCENT, ROOT / "Materials" / "Base_Metals"),
+        "Steel_Iron":               ("Steel & Iron",               ACCENT, ROOT / "Materials" / "Steel_Iron"),
+        "Specialty_Chemicals":      ("Specialty Chemicals",        ACCENT, ROOT / "Materials" / "Specialty_Chemicals"),
+        "Construction_Materials":   ("Construction Materials",     ACCENT, ROOT / "Materials" / "Construction_Materials"),
+        "Other":                    ("Other",                      ACCENT, ROOT / "Materials" / "Other"),
+    },
+    "Utilities": {
+        "Electric_Utilities": ("Electric Utilities", ACCENT, ROOT / "Utilities" / "Electric_Utilities"),
+        "Gas_Utilities":      ("Gas Utilities",      ACCENT, ROOT / "Utilities" / "Gas_Utilities"),
+        "Water_Utilities":    ("Water Utilities",    ACCENT, ROOT / "Utilities" / "Water_Utilities"),
+        "Multi_Utilities":    ("Multi-Utilities",    ACCENT, ROOT / "Utilities" / "Multi_Utilities"),
+        "Renewable_IPPs":     ("Renewable IPPs",     ACCENT, ROOT / "Utilities" / "Renewable_IPPs"),
+        "Other":              ("Other",              ACCENT, ROOT / "Utilities" / "Other"),
     },
     "Real Estate": {
         "Diversified_REITs":          ("Diversified REITs",           ACCENT, ROOT / "Real_Estate" / "Diversified_REITs"),
@@ -165,16 +188,7 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
         "Specialty_REITs":            ("Specialty REITs",             ACCENT, ROOT / "Real_Estate" / "Specialty_REITs"),
         "Mortgage_REITs":             ("Mortgage REITs",              ACCENT, ROOT / "Real_Estate" / "Mortgage_REITs"),
         "Proptech":                   ("Proptech",                    ACCENT, ROOT / "Real_Estate" / "Proptech"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Real_Estate" / "Other"),
-    },
-    "Healthcare Services": {
-        "Hospitals_Health_Systems": ("Hospitals & Health Systems", ACCENT, ROOT / "Healthcare_Services" / "Hospitals_Health_Systems"),
-        "Health_Insurance":         ("Health Insurance",           ACCENT, ROOT / "Healthcare_Services" / "Health_Insurance"),
-        "Healthcare_IT_Telehealth": ("Healthcare IT & Telehealth", ACCENT, ROOT / "Healthcare_Services" / "Healthcare_IT_Telehealth"),
-        "Pharmacy_Distributors":    ("Pharmacy & Distributors",    ACCENT, ROOT / "Healthcare_Services" / "Pharmacy_Distributors"),
-        "Medical_Devices":          ("Medical Devices",            ACCENT, ROOT / "Healthcare_Services" / "Medical_Devices"),
-        "Dental_Vision_Hearing":    ("Dental, Vision & Hearing",   ACCENT, ROOT / "Healthcare_Services" / "Dental_Vision_Hearing"),
-        "Other":                    ("Other",                      ACCENT, ROOT / "Healthcare_Services" / "Other"),
+        "Other":                      ("Other",                       ACCENT, ROOT / "Real_Estate" / "Other"),
     },
 }
 
@@ -1551,17 +1565,17 @@ def main() -> None:
         return
 
     uni_mod = {
-        "Biotechnology":          bio_universe,
         "Technology":             tech_universe,
-        "Energy":                  energy_universe,
-        "Industrials":            industrials_universe,
-        "Materials":              materials_universe,
-        "Consumer Discretionary": consumer_disc_universe,
-        "Financials":             financials_universe,
         "Communication Services": comm_services_universe,
+        "Consumer Discretionary": consumer_disc_universe,
         "Consumer Staples":       consumer_staples_universe,
+        "Health Care":            healthcare_universe,
+        "Financials":             financials_universe,
+        "Industrials":            industrials_universe,
+        "Energy":                 energy_universe,
+        "Materials":              materials_universe,
+        "Utilities":              utilities_universe,
         "Real Estate":            real_estate_universe,
-        "Healthcare Services":    healthcare_svc_universe,
     }[main_cat]
 
     st.markdown(
