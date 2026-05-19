@@ -33,6 +33,7 @@ from data import (
     short_blurb,
     tv_num,
 )
+from changelog import record_snapshot, recent_changes
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -822,6 +823,55 @@ def render_journal() -> None:
 
 
 # =============================================================================
+# Sidebar changelog
+# =============================================================================
+def _render_changelog_panel() -> None:
+    """Sidebar panel showing the most recent ticker adds / drops produced
+    by the $1–$20 + float<20M screen, accumulated across sector loads."""
+    entries = recent_changes(limit=10)
+    st.markdown(
+        f"""<div style="margin-top:14px;padding-top:12px;
+          border-top:1px solid {BORDER};">
+          <div style="font-size:0.7rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;
+            margin-bottom:6px;">Changelog</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    if not entries:
+        st.caption("No ticker changes recorded yet. Visit sector pages "
+                   "to start tracking adds and drops.")
+        return
+    rows: list[str] = []
+    for e in entries:
+        ts = e.get("ts", "")
+        sector = e.get("sector", "")
+        added = e.get("added") or []
+        removed = e.get("removed") or []
+        bits: list[str] = []
+        if added:
+            bits.append(
+                f"<span style='color:{GOOD};'>+{len(added)}</span> "
+                f"<span style='color:{WHITE_DIM};font-size:0.75rem;'>"
+                f"{', '.join(added[:6])}{'…' if len(added) > 6 else ''}</span>"
+            )
+        if removed:
+            bits.append(
+                f"<span style='color:{DANGER};'>−{len(removed)}</span> "
+                f"<span style='color:{WHITE_DIM};font-size:0.75rem;'>"
+                f"{', '.join(removed[:6])}{'…' if len(removed) > 6 else ''}</span>"
+            )
+        rows.append(
+            f"<div style='padding:6px 0;border-bottom:1px solid {BORDER};'>"
+            f"<div style='font-size:0.7rem;color:{WHITE_MUTE};'>"
+            f"{ts} &middot; {sector}</div>"
+            f"<div style='font-size:0.8rem;line-height:1.4;'>"
+            f"{' &nbsp; '.join(bits)}</div></div>"
+        )
+    st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+# =============================================================================
 # Today's top moves
 # =============================================================================
 def render_top_movers() -> None:
@@ -1516,6 +1566,9 @@ def main() -> None:
                 st.cache_data.clear()
                 st.rerun()
 
+            # ---------- Changelog ----------
+            _render_changelog_panel()
+
             # ---------- AI Employees ----------
             st.markdown(
                 f"""<div style="margin-top:18px;padding-top:14px;
@@ -1591,6 +1644,14 @@ def main() -> None:
 
     with st.spinner("Loading market data…"):
         by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
+
+    # Snapshot the qualifying tickers for this sector so the sidebar
+    # changelog can report adds/drops between loads.
+    try:
+        all_qual = sorted({q.ticker for syms in by_cat.values() for q in syms})
+        record_snapshot(main_cat, all_qual)
+    except Exception:
+        pass
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
 
