@@ -556,6 +556,14 @@ def fetch_premarket_catalysts(
         else:
             upside_pct = 0.0
 
+        # Type = catalyst type (FDA Approval, Clinical Data, etc.).
+        # Sentiment = Bullish / Bearish / Neutral. Independent of type.
+        if title:
+            ctype = classify_catalyst(title)
+        elif sec_match:
+            ctype = sec_match.get("type", "News")
+        else:
+            ctype = "News"
         sentiment = classify_sentiment(title) if title else "Neutral"
         unverified = sources_count < 2
 
@@ -566,6 +574,7 @@ def fetch_premarket_catalysts(
             "pm_high_time":     pm_high_ts.strftime("%I:%M %p ET").lstrip("0"),
             "prior_close":      pc,
             "upside_pct":       upside_pct,
+            "type":             ctype,
             "sentiment":        sentiment,
             "title":            title,
             "link":             link,

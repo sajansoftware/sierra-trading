@@ -523,7 +523,7 @@ def catalyst_dialog(ticker: str) -> None:
         f"text-align:{align};'>{h}</th>"
         for h, align in [
             ("Date","left"), ("PM Low","right"), ("PM High","right"),
-            ("Upside","right"), ("Type","left"),
+            ("Upside","right"), ("Type","left"), ("Sentiment","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
     )
@@ -537,6 +537,13 @@ def catalyst_dialog(ticker: str) -> None:
     body_rows = []
     for r in rows:
         date_str = r["date"].strftime("%b %d, %Y")
+        type_label = r.get("type") or "News"
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        )
         sent_label = r.get("sentiment") or "Neutral"
         sent_col = SENT_COLOR.get(sent_label, "#64748b")
         sent_badge = (
@@ -603,6 +610,7 @@ def catalyst_dialog(ticker: str) -> None:
             f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>+{up:.1f}%</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{sent_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>{catalyst_text}</td>"
