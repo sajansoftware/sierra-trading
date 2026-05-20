@@ -137,7 +137,7 @@ def audit_rows(rows: list[dict], ticker: str) -> list[QASuggestion]:
     out: list[QASuggestion] = []
     for r in rows:
         current = r.get("type", "")
-        if current != "No news":
+        if current not in ("No news", "Press Release"):
             continue
         title = r.get("title", "") or r.get("catalyst", "") or ""
         if not title:

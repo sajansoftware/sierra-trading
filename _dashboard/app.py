@@ -493,7 +493,9 @@ CATALYST_TYPE_COLOR = {
     "Guidance":         "#a78bfa",
     "Patent":           "#94a3b8",
     "Analyst":          "#94a3b8",
-    "No news":          "#475569",
+    "Management Change":"#94a3b8",
+    "Operational Update":"#94a3b8",
+    "Press Release":    "#64748b",
     # Bearish-leaning (orange / red)
     "Offering":         "#f97316",
     "Private Placement":"#f97316",
@@ -502,6 +504,7 @@ CATALYST_TYPE_COLOR = {
     "Bankruptcy":       "#ef4444",
     "Restructuring":    "#f97316",
     "Auditor":          "#94a3b8",
+    "Legal / Regulatory":"#ef4444",
 }
 
 
@@ -1067,9 +1070,9 @@ def render_operations() -> None:
           letter-spacing:-0.5px;margin-bottom:6px;">Classifier QA Audit</div>
         <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
           Operations scans every passing ticker's catalyst headlines, finds
-          rows labeled 'No news' that contain biotech / corporate signal
-          words, and proposes the catalyst type plus the keyword to add to
-          the classifier.</div>""",
+          rows still labeled 'Press Release' that contain biotech /
+          corporate signal words, and proposes the catalyst type plus the
+          keyword to add to the classifier.</div>""",
         unsafe_allow_html=True,
     )
 
@@ -1102,7 +1105,7 @@ def render_operations() -> None:
             except Exception:
                 continue
             n_rows += len(rows)
-            n_no_news += sum(1 for r in rows if r.get("type") == "No news")
+            n_no_news += sum(1 for r in rows if r.get("type") in ("No news", "Press Release"))
             suggestions.extend(audit_rows(rows, tkr))
 
     # Summary
@@ -1111,7 +1114,7 @@ def render_operations() -> None:
         f"""<div style="display:flex;gap:24px;margin-bottom:18px;">
           <span style="color:{WHITE};font-weight:600;">Tickers scanned: {len(pool)}</span>
           <span style="color:{WHITE_DIM};">Catalyst rows: {n_rows}</span>
-          <span style="color:{WHITE_DIM};">Currently 'No news': {n_no_news}</span>
+          <span style="color:{WHITE_DIM};">Unclassified rows: {n_no_news}</span>
           <span style="color:{GOOD};">Classifier coverage: {cov_pct:.1f}%</span>
           <span style="color:{WARN};">Operations suggestions: {len(suggestions)}</span>
         </div>""",
@@ -1191,7 +1194,7 @@ def render_operations() -> None:
             find the <code style="color:{ACCENT};">CATALYST_KEYWORDS</code>
             list, and append each <em>matched phrase</em> above to its
             suggested type. Restart the dashboard - the previously
-            'No news' rows reclassify on the next catalyst-dialog open.
+            unclassified rows reclassify on the next catalyst-dialog open.
           </div>
         </div>""",
         unsafe_allow_html=True,

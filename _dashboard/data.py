@@ -160,25 +160,45 @@ CATALYST_KEYWORDS: list[tuple[str, list[str]]] = [
                            "abstract accepted"]),
     # ---- Corporate / business ----
     ("Earnings",          ["earnings", "reports q", "quarterly results", "fiscal year",
-                           "revenue beat", "revenue miss"]),
+                           "revenue beat", "revenue miss", "financial results",
+                           "audited financial", "annual results", "full year",
+                           "half year results", "interim results", "earnings call",
+                           "first quarter", "second quarter", "third quarter",
+                           "fourth quarter", "q1 ", "q2 ", "q3 ", "q4 ",
+                           "reports first", "reports second", "reports third",
+                           "reports fourth", "reports full"]),
     ("Cash Runway",       ["cash runway", "cash position", "cash balance", "burn rate",
                            "funded into", "operating runway"]),
     ("Product Launch",    ["launches", "launch of", "commercial launch", "now available",
-                           "first sale", "commercialization"]),
+                           "first sale", "commercialization", "introduces",
+                           "unveils", "rolls out", "expands product",
+                           "expands market reach", "integrates", "integration with",
+                           "successfully integrates", "platform launch"]),
     ("Offering",          ["public offering", "follow-on offering", "registered direct",
-                           " atm ", "atm offering", "warrant", "secondary offering"]),
+                           " atm ", "atm offering", "warrant", "secondary offering",
+                           "closing of initial public offering", "closing of offering",
+                           "closing of public", "institutional offering",
+                           "closing of $", "closes offering", "closes $",
+                           "pricing of", "prices public offering",
+                           "underwritten offering"]),
     ("Private Placement", ["private placement", "pipe ", "convertible note", "convertible debt"]),
     ("Buyout / Rumor",    ["buyout", "acquisition rumor", "acquisition talks",
                            "exploring strategic alternatives", "strategic review",
                            "takeover", "to be acquired", "considers sale"]),
     ("M&A",               ["merger", "acquir", "acquisition", "to acquire", "combines with"]),
     ("Partnership",       ["partnership", "collaboration", "licensing", "license agreement",
-                           "joint venture", "co-development"]),
+                           "joint venture", "co-development", "strategic alliance",
+                           "strategic agreement", "strategic partnership",
+                           "alongside", "joins forces", "teams up", "teams with",
+                           "alliance with", "sponsorship", "strategic brand"]),
     ("Contract Win",      ["awarded", "contract win", "wins contract", "secures contract",
-                           "government contract"]),
-    ("Reverse Split",     ["reverse split", "reverse stock split", "1-for-",
+                           "government contract", "wins funding", "secures funding"]),
+    ("Reverse Split",     ["reverse split", "reverse stock split", "1-for-", "1 for ",
+                           "share consolidation", "consolidation of shares",
                            "regain compliance", "nasdaq compliance", "minimum bid price"]),
-    ("Listing",           ["ipo", "uplisting", "nasdaq listing", "delisting", "stock split"]),
+    ("Listing",           ["ipo", "uplisting", "nasdaq listing", "delisting", "stock split",
+                           "begins trading", "lists on", "joins russell",
+                           "added to index", "stock symbol"]),
     ("Guidance",          ["raises guidance", "lowers guidance", "outlook",
                            "reaffirms guidance", "guidance update"]),
     ("Patent",             ["patent granted", "patent allowance", "patent issued",
@@ -189,13 +209,36 @@ CATALYST_KEYWORDS: list[tuple[str, list[str]]] = [
                            "share repurchase", "form 4 purchase"]),
     ("Analyst",           ["upgrade", "downgrade", "initiates coverage", "price target",
                            "raises target", "lowers target"]),
+    ("Conference",        ["webinar", "investor presentation", "ceo presentation",
+                           "fireside chat", "investor day", "r&d day",
+                           "key opinion leader", "kol event", "annual meeting",
+                           "investor conference", "investor webcast", "q&a webinar"]),
+    ("Management Change", ["ceo resigns", "cfo resigns", "appoints", "appointment of",
+                           "names ceo", "names cfo", "names chief", "new ceo",
+                           "new cfo", "steps down", "named president",
+                           "board of directors", "board appoints",
+                           "joins board", "appointed to the board"]),
+    ("Operational Update", ["operational update", "business update", "company update",
+                            "corporate update", "progress update", "milestone",
+                            "highlights", "year in review", "expands operations",
+                            "expands manufacturing", "scaling manufacturing",
+                            "facility", "manufacturing capacity"]),
+    ("Legal / Regulatory", ["lawsuit", "class action", "investigation", "subpoena",
+                            "securities investigation", "warning letter",
+                            "doj investigation", "sec investigation",
+                            "non-compliance", "non-reliance", "restatement",
+                            "material weakness", "going concern", "substantial doubt"]),
 ]
 
 
 def classify_catalyst(title: str) -> str:
-    """Map a news headline to a catalyst type. Returns 'No news' when
-    nothing in the taxonomy matches (so we never show a generic 'News'
-    label - either a real type or an explicit no-data marker)."""
+    """Map a news headline to a catalyst type. Every non-empty headline
+    receives a real tag — if no taxonomy entry matches we fall back to
+    'Press Release' (a generic but visible tag) so no row ever shows
+    'No news' when a catalyst is present.
+
+    'No news' is only returned for a truly empty / boilerplate headline.
+    """
     if not title:
         return "No news"
     t = title.lower()
@@ -209,7 +252,10 @@ def classify_catalyst(title: str) -> str:
     for label, keywords in CATALYST_KEYWORDS:
         if any(kw in t for kw in keywords):
             return label
-    return "No news"
+    # Fallback: a real headline exists but no taxonomy entry matched.
+    # Tag it as a generic Press Release rather than 'No news' so the
+    # row always carries a visible classification.
+    return "Press Release"
 
 
 @st.cache_data(ttl=300, show_spinner=False)  # 5 min (intraday refresh)
@@ -343,13 +389,18 @@ def fetch_top_movers(
                 r["news_title"] = ""
                 r["news_link"] = ""
                 r["news_source"] = "—"
-                r["news_type"] = "News"
+                r["news_type"] = "—"
     except Exception:
         for r in rows:
             r.setdefault("news_title", "")
             r.setdefault("news_link", "")
             r.setdefault("news_source", "—")
-            r.setdefault("news_type", "No news")
+            # If a title made it onto the row, classify it; otherwise
+            # mark as "—" (genuinely no catalyst).
+            if r.get("news_title"):
+                r.setdefault("news_type", classify_catalyst(r["news_title"]))
+            else:
+                r.setdefault("news_type", "—")
 
     rows.sort(key=lambda r: r["move_pct"], reverse=True)
     return rows[:max_rows]
