@@ -355,10 +355,12 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
 def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     """Return (sector_key, sub_sector_folder) for a NASDAQ screener row.
 
-    Two-pass classification:
-      1. Industry-specific mapping (INDUSTRY_TO_SECTOR_SUB) - precise
-         sub-sector when we recognise the industry.
-      2. NASDAQ sector fallback (ND_SECTOR_TO_DASHBOARD) - any ticker
+    Three-pass classification:
+      0. Gemini cache hit — if google-classified disk cache has this
+         ticker, use that (LLM-driven, semantic). No API call here.
+      1. Industry-specific keyword mapping (INDUSTRY_TO_SECTOR_SUB) —
+         precise sub-sector when we recognise the industry.
+      2. NASDAQ sector fallback (ND_SECTOR_TO_DASHBOARD) — any ticker
          whose industry we don't recognise falls into 'Other' within
          its NASDAQ-declared sector. So every ticker that NASDAQ knows
          lands somewhere.
@@ -369,6 +371,17 @@ def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     industry = (row.get("industry") or "").strip()
     sector_str = (row.get("sector") or "").strip()
     name = row.get("name") or ""
+    sym = (row.get("symbol") or "").upper().strip()
+
+    # Pass 0: Gemini cache (no API call — disk lookup)
+    if sym:
+        try:
+            from gemini_classifier import cached_classification
+            gem = cached_classification(sym)
+            if gem is not None:
+                return gem
+        except Exception:
+            pass
 
     mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
     if mapped is not None:
