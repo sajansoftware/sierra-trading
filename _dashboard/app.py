@@ -34,9 +34,7 @@ from data import (
     tv_num,
 )
 from changelog import record_snapshot, recent_events
-from sector_heads import HEADS as SECTOR_HEADS, reply as head_reply
-from managing_directors import MDS, reply as md_reply
-from sentiment_intel import sector_sentiment_snapshot, briefing_lines, detect_patterns
+from sentiment_intel import sector_sentiment_snapshot, briefing_lines
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -910,111 +908,10 @@ def changelog_dialog() -> None:
 
 
 # =============================================================================
-# Sector Head chat overlay
+# Sentiment briefing card
 # =============================================================================
-@st.dialog("Sector Head", width="large")
-def sector_head_chat_dialog(sector_key: str) -> None:
-    """Modal chat overlay with the sector's head trader/analyst."""
-    head = SECTOR_HEADS.get(sector_key)
-    if head is None:
-        st.warning("No sector head assigned.")
-        return
-
-    # Pull live context cached on session by main() right before
-    # opening the dialog — see render_chat_overlay_button.
-    ctx = st.session_state.get(f"chat_ctx_{sector_key}", {})
-
-    # Header card
-    initials = head.name[:1].upper()
-    st.markdown(
-        f"""<div style="display:flex;gap:14px;align-items:center;
-              background:{NAVY_CARD};border:1px solid {BORDER};
-              border-radius:10px;padding:12px 16px;margin-bottom:14px;">
-          <div style="flex:0 0 48px;height:48px;border-radius:50%;
-            background:{ACCENT};color:#06121e;font-weight:700;
-            font-size:1.3rem;display:flex;align-items:center;
-            justify-content:center;">{initials}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:1.15rem;font-weight:700;color:{WHITE};
-              letter-spacing:-0.3px;">{head.name}</div>
-            <div style="font-size:0.78rem;color:{WHITE_DIM};">
-              {head.title} &middot; {len(ctx.get('tickers') or [])} names in screen</div>
-          </div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-
-    hist_key = f"chat_hist_{sector_key}"
-    history = st.session_state.setdefault(hist_key, [
-        {"role": "assistant", "text": head.intro},
-    ])
-
-    # Transcript (scrollable card list)
-    bubbles: list[str] = []
-    for msg in history:
-        is_user = msg["role"] == "user"
-        align = "flex-end" if is_user else "flex-start"
-        bg = ACCENT if is_user else NAVY_HOVER
-        col = "#06121e" if is_user else WHITE
-        badge = "You" if is_user else head.name
-        bubbles.append(
-            f"<div style='display:flex;justify-content:{align};margin:6px 0;'>"
-            f"<div style='max-width:78%;background:{bg};color:{col};"
-            f"border-radius:12px;padding:10px 14px;font-size:0.88rem;"
-            f"line-height:1.45;'>"
-            f"<div style='font-size:0.65rem;opacity:0.7;margin-bottom:3px;'>"
-            f"{badge}</div>"
-            f"<div>{msg['text']}</div></div></div>"
-        )
-    st.markdown(
-        f"<div style='max-height:380px;overflow-y:auto;padding:6px 4px;"
-        f"background:{NAVY};border:1px solid {BORDER};"
-        f"border-radius:8px;margin-bottom:10px;'>"
-        + "".join(bubbles) + "</div>",
-        unsafe_allow_html=True,
-    )
-
-    # Input — st.chat_input can't be used inside dialogs, so use a form.
-    with st.form(key=f"chat_form_{sector_key}", clear_on_submit=True):
-        prompt = st.text_input(
-            f"Ask {head.name} anything…",
-            key=f"chat_in_{sector_key}",
-            label_visibility="collapsed",
-            placeholder=f"Ask {head.name} anything…",
-        )
-        send = st.form_submit_button("Send", type="primary",
-                                     use_container_width=True)
-    if send and prompt.strip():
-        history.append({"role": "user", "text": prompt.strip()})
-        try:
-            answer = head_reply(head, prompt.strip(), ctx)
-        except Exception as e:
-            answer = f"_Something jammed in my reply pipe: {e}_"
-        history.append({"role": "assistant", "text": answer})
-        st.session_state[hist_key] = history
-        st.rerun()
-
-    # Footer controls
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        if st.button("Clear transcript", key=f"chat_clear_{sector_key}",
-                     use_container_width=True):
-            st.session_state[hist_key] = [
-                {"role": "assistant", "text": head.intro},
-            ]
-            st.rerun()
-    with c2:
-        if st.button("Close", key=f"chat_close_{sector_key}",
-                     use_container_width=True):
-            st.session_state.show_chat = None
-            st.rerun()
-
-
-# =============================================================================
-# Sector briefing card (sentiment intel)
-# =============================================================================
-def render_sector_briefing(head_name: str, snap) -> None:
-    """Visible card showing the sector head's current read on sentiment."""
+def render_sentiment_briefing(snap) -> None:
+    """Visible card with the desk's current sentiment read + patterns."""
     skew = snap.skew
     skew_col = {
         "Bullish": GOOD,
@@ -1038,7 +935,7 @@ def render_sector_briefing(head_name: str, snap) -> None:
               align-items:center;margin-bottom:8px;">
             <div style="font-size:0.7rem;color:{WHITE_MUTE};
               text-transform:uppercase;letter-spacing:1px;">
-              {head_name}'s briefing &middot; {snap.window_days}-day window</div>
+              Sentiment briefing &middot; {snap.window_days}-day window</div>
             <div style="font-size:0.72rem;font-weight:700;color:{skew_col};
               text-transform:uppercase;letter-spacing:1px;">{skew} &middot;
               {snap.bull} bull / {snap.bear} bear / {snap.neutral} neut</div>
@@ -1048,231 +945,6 @@ def render_sector_briefing(head_name: str, snap) -> None:
         </div>""",
         unsafe_allow_html=True,
     )
-
-
-# =============================================================================
-# Managing Director chat dialog
-# =============================================================================
-@st.dialog("Managing Director", width="large")
-def md_chat_dialog(md_name: str) -> None:
-    md = MDS.get(md_name)
-    if md is None:
-        st.warning("MD not found.")
-        return
-
-    ctx = st.session_state.get("md_ctx", {})
-    initials = md.name[:1].upper()
-
-    st.markdown(
-        f"""<div style="display:flex;gap:14px;align-items:center;
-              background:{NAVY_CARD};border:1px solid {BORDER};
-              border-radius:10px;padding:12px 16px;margin-bottom:14px;">
-          <div style="flex:0 0 52px;height:52px;border-radius:50%;
-            background:{ACCENT};color:#06121e;font-weight:700;
-            font-size:1.4rem;display:flex;align-items:center;
-            justify-content:center;">{initials}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:1.2rem;font-weight:700;color:{WHITE};
-              letter-spacing:-0.3px;">{md.name}</div>
-            <div style="font-size:0.8rem;color:{WHITE_DIM};">{md.title}</div>
-          </div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-
-    hist_key = f"md_hist_{md_name}"
-    history = st.session_state.setdefault(hist_key, [
-        {"role": "assistant", "text": md.intro},
-    ])
-
-    bubbles: list[str] = []
-    for msg in history:
-        is_user = msg["role"] == "user"
-        align = "flex-end" if is_user else "flex-start"
-        bg = ACCENT if is_user else NAVY_HOVER
-        col = "#06121e" if is_user else WHITE
-        badge = "You" if is_user else md.name
-        bubbles.append(
-            f"<div style='display:flex;justify-content:{align};margin:6px 0;'>"
-            f"<div style='max-width:78%;background:{bg};color:{col};"
-            f"border-radius:12px;padding:10px 14px;font-size:0.88rem;"
-            f"line-height:1.45;white-space:pre-wrap;'>"
-            f"<div style='font-size:0.65rem;opacity:0.7;margin-bottom:3px;'>"
-            f"{badge}</div>"
-            f"<div>{msg['text']}</div></div></div>"
-        )
-    st.markdown(
-        f"<div style='max-height:380px;overflow-y:auto;padding:6px 4px;"
-        f"background:{NAVY};border:1px solid {BORDER};"
-        f"border-radius:8px;margin-bottom:10px;'>"
-        + "".join(bubbles) + "</div>",
-        unsafe_allow_html=True,
-    )
-
-    with st.form(key=f"md_form_{md_name}", clear_on_submit=True):
-        prompt = st.text_input(
-            f"Ask {md.name} anything…",
-            key=f"md_in_{md_name}",
-            label_visibility="collapsed",
-            placeholder=f"Ask {md.name} anything…",
-        )
-        send = st.form_submit_button("Send", type="primary",
-                                     use_container_width=True)
-    if send and prompt.strip():
-        history.append({"role": "user", "text": prompt.strip()})
-        try:
-            answer = md_reply(md, prompt.strip(), ctx)
-        except Exception as e:
-            answer = f"_Reply error: {e}_"
-        history.append({"role": "assistant", "text": answer})
-        st.session_state[hist_key] = history
-        st.rerun()
-
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        if st.button("Clear transcript", key=f"md_clear_{md_name}",
-                     use_container_width=True):
-            st.session_state[hist_key] = [
-                {"role": "assistant", "text": md.intro},
-            ]
-            st.rerun()
-    with c2:
-        if st.button("Close", key=f"md_close_{md_name}",
-                     use_container_width=True):
-            st.session_state.show_md = None
-            st.rerun()
-
-
-# =============================================================================
-# Manage AI Employees page
-# =============================================================================
-def render_manage_employees() -> None:
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">AI Employees / Manage</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">Front Office</div>
-        <div style="font-size:0.88rem;color:{WHITE_DIM};margin-bottom:22px;">
-          Speak to the managing directors. Each MD owns a horizontal
-          slice of the firm and supervises the line agents under them
-          (sector heads, Aidan, Mia, and the planned risk / execution
-          desks).</div>""",
-        unsafe_allow_html=True,
-    )
-
-    # Build context for MD chats — pulls sentiment snapshots from every
-    # sector the user has visited (cheap; cached on session).
-    from changelog import recent_events as _recent_events
-    changelog = _recent_events(limit=40)
-    sectors_covered = len({e.get("sector") for e in changelog})
-    total_tickers = 0
-    cross_sector_sent: dict = {}
-    for key in st.session_state.keys():
-        if isinstance(key, str) and key.startswith("chat_ctx_"):
-            sec = key[len("chat_ctx_"):]
-            ctx = st.session_state.get(key) or {}
-            total_tickers += len(ctx.get("tickers") or [])
-            snap = ctx.get("sentiment")
-            if snap is not None:
-                cross_sector_sent[sec] = snap
-    st.session_state.md_ctx = {
-        "changelog": changelog,
-        "sectors_covered": max(sectors_covered, len(cross_sector_sent)),
-        "total_tickers": total_tickers,
-        "cross_sector_sentiment": cross_sector_sent,
-    }
-
-    # Cross-sector sentiment strip — shows the firm-wide tape at a glance.
-    cross = st.session_state.md_ctx.get("cross_sector_sentiment") or {}
-    if cross:
-        st.markdown(
-            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
-            f"text-transform:uppercase;letter-spacing:1px;"
-            f"margin-bottom:8px;'>Firm-wide sentiment "
-            f"({len(cross)} desks reporting)</div>",
-            unsafe_allow_html=True,
-        )
-        # Sort: bullish first, then mixed, then bearish, then thin
-        order = {"Bullish": 0, "Mixed": 1, "Bearish": 2, "Thin": 3}
-        rows = sorted(
-            cross.items(),
-            key=lambda kv: (order.get(kv[1].skew, 99),
-                            -(kv[1].bull - kv[1].bear)),
-        )
-        chips = []
-        for sec, snap in rows:
-            skew = snap.skew
-            col = {"Bullish": GOOD, "Bearish": DANGER,
-                   "Mixed": WARN, "Thin": WHITE_MUTE}.get(skew, WHITE_MUTE)
-            chips.append(
-                f"<div style='display:inline-block;margin:0 8px 8px 0;"
-                f"padding:8px 12px;background:{NAVY_CARD};"
-                f"border:1px solid {BORDER};border-left:3px solid {col};"
-                f"border-radius:6px;'>"
-                f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
-                f"text-transform:uppercase;letter-spacing:0.5px;'>{sec}</div>"
-                f"<div style='font-size:0.82rem;color:{WHITE};font-weight:600;'>"
-                f"{skew} &middot; "
-                f"<span style='color:{GOOD};'>{snap.bull}</span>/"
-                f"<span style='color:{DANGER};'>{snap.bear}</span>"
-                f"</div></div>"
-            )
-        st.markdown(
-            "<div style='margin-bottom:18px;'>" + "".join(chips) + "</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("Visit a sector page to seed the cross-sector sentiment "
-                "view. The MDs synthesize across whatever desks you've "
-                "loaded.")
-
-    # Grid of MD cards
-    md_list = list(MDS.values())
-    cols_per_row = 2
-    for i in range(0, len(md_list), cols_per_row):
-        row = md_list[i:i + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for col, md in zip(cols, row):
-            with col:
-                initials = md.name[:1].upper()
-                reports_str = " · ".join(md.reports[:3]) + (
-                    "" if len(md.reports) <= 3 else f" +{len(md.reports)-3}"
-                )
-                st.markdown(
-                    f"""<div style="background:{NAVY_CARD};
-                          border:1px solid {BORDER};border-radius:10px;
-                          padding:16px;margin-bottom:14px;min-height:170px;">
-                      <div style="display:flex;gap:12px;align-items:center;
-                          margin-bottom:10px;">
-                        <div style="flex:0 0 44px;height:44px;border-radius:50%;
-                          background:{ACCENT};color:#06121e;font-weight:700;
-                          font-size:1.15rem;display:flex;align-items:center;
-                          justify-content:center;">{initials}</div>
-                        <div style="flex:1;min-width:0;">
-                          <div style="font-size:1rem;font-weight:700;
-                            color:{WHITE};letter-spacing:-0.3px;">{md.name}</div>
-                          <div style="font-size:0.75rem;color:{WHITE_DIM};">
-                            {md.title}</div>
-                        </div>
-                      </div>
-                      <div style="font-size:0.78rem;color:{WHITE_DIM};
-                        line-height:1.45;margin-bottom:8px;">
-                        Supervises: {reports_str}</div>
-                      <div style="font-size:0.72rem;color:{WHITE_MUTE};
-                        font-style:italic;">{md.persona}</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                if st.button(f"💬 Speak to {md.name}",
-                             key=f"md_btn_{md.name}",
-                             use_container_width=True):
-                    st.session_state.show_md = md.name
-                    st.rerun()
-
-    if st.session_state.get("show_md"):
-        md_chat_dialog(st.session_state.show_md)
 
 
 # =============================================================================
@@ -1383,21 +1055,21 @@ def render_top_movers() -> None:
 
 
 # =============================================================================
-# Aidan — catalyst-classifier QA agent
+# Operations — catalyst-classifier QA agent
 # =============================================================================
-def render_aidan_qa() -> None:
+def render_operations() -> None:
     st.markdown(
         f"""<div style="margin-bottom:8px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Aidan / QA</span>
+            text-transform:uppercase;letter-spacing:1px;">Operations</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
           letter-spacing:-0.5px;margin-bottom:6px;">Classifier QA Audit</div>
         <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Aidan scans every passing ticker's catalyst headlines, finds rows
-          labeled 'No news' that contain biotech / corporate signal words,
-          and proposes the catalyst type plus the keyword to add to the
-          classifier.</div>""",
+          Operations scans every passing ticker's catalyst headlines, finds
+          rows labeled 'No news' that contain biotech / corporate signal
+          words, and proposes the catalyst type plus the keyword to add to
+          the classifier.</div>""",
         unsafe_allow_html=True,
     )
 
@@ -1423,7 +1095,7 @@ def render_aidan_qa() -> None:
     suggestions: list[QASuggestion] = []
     n_no_news = 0
     n_rows = 0
-    with st.spinner(f"Aidan auditing {len(pool)} tickers…"):
+    with st.spinner(f"Operations auditing {len(pool)} tickers…"):
         for tkr in pool:
             try:
                 rows = fetch_premarket_catalysts(tkr)
@@ -1441,7 +1113,7 @@ def render_aidan_qa() -> None:
           <span style="color:{WHITE_DIM};">Catalyst rows: {n_rows}</span>
           <span style="color:{WHITE_DIM};">Currently 'No news': {n_no_news}</span>
           <span style="color:{GOOD};">Classifier coverage: {cov_pct:.1f}%</span>
-          <span style="color:{WARN};">Aidan suggestions: {len(suggestions)}</span>
+          <span style="color:{WARN};">Operations suggestions: {len(suggestions)}</span>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -1468,7 +1140,7 @@ def render_aidan_qa() -> None:
                 font-weight:700;font-size:0.78rem;padding:3px 10px;
                 border-radius:4px;">{stype}</span>
               <span style="color:{WHITE_MUTE};font-size:0.8rem;">
-                {len(items)} headline(s) Aidan would reclassify here</span>
+                {len(items)} headline(s) Operations would reclassify here</span>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -1513,7 +1185,7 @@ def render_aidan_qa() -> None:
           background:{NAVY_CARD};border:1px solid {BORDER};
           border-radius:6px;">
           <div style="color:{WHITE};font-weight:600;margin-bottom:6px;">
-            How to apply Aidan's suggestions</div>
+            How to apply Operations' suggestions</div>
           <div style="color:{WHITE_DIM};font-size:0.85rem;line-height:1.5;">
             Open <code style="color:{ACCENT};">_dashboard/data.py</code>,
             find the <code style="color:{ACCENT};">CATALYST_KEYWORDS</code>
@@ -1915,7 +1587,6 @@ def main() -> None:
 
     def _reset_view():
         st.session_state.view = "sector"
-        st.session_state.show_chat = None
 
     category_keys = list(SECTORS.keys()) + ["Trading Journal"]
 
@@ -1994,12 +1665,12 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             if st.button(
-                "🔍 Aidan (QA Analyst)",
+                "🛠 Operations",
                 use_container_width=True,
-                key="aidan_btn",
-                type="primary" if st.session_state.view == "aidan" else "secondary",
+                key="operations_btn",
+                type="primary" if st.session_state.view == "operations" else "secondary",
             ):
-                st.session_state.view = "aidan"
+                st.session_state.view = "operations"
                 st.rerun()
 
             if st.button(
@@ -2011,16 +1682,6 @@ def main() -> None:
                 st.session_state.view = "mia"
                 st.rerun()
 
-            if st.button(
-                "🏢 Manage",
-                use_container_width=True,
-                key="manage_btn",
-                type="primary" if st.session_state.view == "manage" else "secondary",
-                help="Speak to the managing directors",
-            ):
-                st.session_state.view = "manage"
-                st.rerun()
-
     if is_journal:
         render_journal()
         return
@@ -2029,16 +1690,12 @@ def main() -> None:
         render_top_movers()
         return
 
-    if st.session_state.view == "aidan":
-        render_aidan_qa()
+    if st.session_state.view in ("operations", "aidan"):
+        render_operations()
         return
 
     if st.session_state.view == "mia":
         render_mia_coach()
-        return
-
-    if st.session_state.view == "manage":
-        render_manage_employees()
         return
 
     if st.session_state.view == "ipo":
@@ -2059,10 +1716,7 @@ def main() -> None:
         "Real Estate":            real_estate_universe,
     }[main_cat]
 
-    head = SECTOR_HEADS.get(main_cat)
-    hcols = st.columns([7, 3]) if head else None
-    target = hcols[0] if hcols else st
-    target.markdown(
+    st.markdown(
         f"""<div style="margin-bottom:6px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
             text-transform:uppercase;letter-spacing:1px;">
@@ -2072,17 +1726,6 @@ def main() -> None:
           letter-spacing:-0.5px;margin-bottom:20px;">Sierra Trading</div>""",
         unsafe_allow_html=True,
     )
-    if head and hcols is not None:
-        with hcols[1]:
-            st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
-            if st.button(
-                f"💬 Chat with {head.name}",
-                key=f"chat_open_{main_cat}",
-                use_container_width=True,
-                help=f"{head.title} — {head.persona}",
-            ):
-                st.session_state.show_chat = main_cat
-                st.rerun()
 
     with st.spinner("Loading market data…"):
         by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
@@ -2102,37 +1745,16 @@ def main() -> None:
     except Exception:
         pass
 
-    # Build chat context for the sector head (cheap; cached on session).
-    # Also compute sentiment snapshot once per render and stash it for
-    # both the briefing card and the chat reply engine.
-    snap = None
-    if head is not None:
-        try:
-            from changelog import recent_events as _recent_events
-            sub_folders = list(by_cat.keys())
-            tickers_list = sorted({q.ticker for syms in by_cat.values() for q in syms})
-            try:
-                snap = sector_sentiment_snapshot(
-                    main_cat, tuple(tickers_list), window_days=7,
-                )
-            except Exception:
-                snap = None
-            st.session_state[f"chat_ctx_{main_cat}"] = {
-                "tickers": tickers_list,
-                "info": uni_mod.INFO,
-                "sub_folders": sub_folders,
-                "changelog": _recent_events(limit=30),
-                "movers": [],
-                "sentiment": snap,
-            }
-        except Exception:
-            pass
-
-    if head is not None and snap is not None:
-        render_sector_briefing(head.name, snap)
-
-    if st.session_state.get("show_chat") == main_cat:
-        sector_head_chat_dialog(main_cat)
+    # Compute sentiment snapshot once per render for the briefing card.
+    try:
+        tickers_list = sorted({q.ticker for syms in by_cat.values() for q in syms})
+        snap = sector_sentiment_snapshot(
+            main_cat, tuple(tickers_list), window_days=7,
+        )
+    except Exception:
+        snap = None
+    if snap is not None:
+        render_sentiment_briefing(snap)
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
 
