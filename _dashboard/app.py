@@ -330,6 +330,17 @@ def inject_theme() -> None:
         table.sierra-table tbody tr:hover td {{
             background-color: {NAVY_HOVER} !important;
         }}
+        table.sierra-table tbody tr.sierra-clickable {{
+            cursor: pointer;
+        }}
+        table.sierra-table tbody tr.sierra-clickable:hover td {{
+            background-color: {NAVY_HOVER} !important;
+            box-shadow: inset 3px 0 0 {ACCENT};
+        }}
+        table.sierra-table tbody tr.sierra-clickable a {{
+            text-decoration: none !important;
+            display: block;
+        }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -524,7 +535,10 @@ def catalyst_dialog(ticker: str) -> None:
 
     st.markdown(
         f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};"
-        f"margin-bottom:14px;'>{ticker} — Pre-Market Catalysts</div>",
+        f"margin-bottom:4px;'>{ticker} — Pre-Market Catalysts</div>"
+        f"<div style='font-size:0.78rem;color:{WHITE_MUTE};"
+        f"margin-bottom:14px;'>Click any row to open {ticker} on "
+        f"TradingView (5-min) at the PM-low timestamp.</div>",
         unsafe_allow_html=True,
     )
 
@@ -609,9 +623,11 @@ def catalyst_dialog(ticker: str) -> None:
         up = r["upside_pct"]
         up_color = GOOD if up >= 50 else (WARN if up >= 30 else ACCENT)
         pm_low = r.get("pm_low")
+        pm_low_time = r.get("pm_low_time") or ""
         pm_low_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
-            f"${pm_low:.2f}</div>"
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>${pm_low:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{pm_low_time}</div>"
+               if pm_low_time else "")
             if pm_low is not None
             else f"<div style='color:#64748b;'>—</div>"
         )
@@ -619,19 +635,40 @@ def catalyst_dialog(ticker: str) -> None:
             f"<div style='color:{WHITE};font-weight:600;'>${r['pm_high']:.2f}</div>"
             f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_high_time']}</div>"
         )
+        # TradingView deep-link: 5m chart at the symbol. URL hash carries
+        # the PM-low date + time so the user knows where to scroll on
+        # arrival (TradingView doesn't accept intraday time as a query
+        # param, so this is the best deep-link possible today).
+        date_iso = r["date"].isoformat() if hasattr(r["date"], "isoformat") else str(r["date"])
+        tv_url = (
+            f"https://www.tradingview.com/chart/?symbol=NASDAQ%3A{ticker}"
+            f"&interval=5#pm_low={date_iso}_{pm_low_time.replace(' ', '_')}"
+        )
+        tv_tip = (f"Open {ticker} on TradingView 5m — scroll to "
+                  f"{date_str} {pm_low_time} (PM low)") if pm_low_time else \
+                 (f"Open {ticker} on TradingView 5m — {date_str}")
+        row_link_open = (
+            f"<a href='{tv_url}' target='_blank' "
+            f"title='{tv_tip}' "
+            f"style='display:block;color:inherit;text-decoration:none;'>"
+        )
+        row_link_close = "</a>"
         body_rows.append(
-            f"<tr>"
+            f"<tr class='sierra-clickable'>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>{date_str}</td>"
+            f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>"
+            f"{row_link_open}📈 {date_str}{row_link_close}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
+            f"text-align:right;vertical-align:top;'>{row_link_open}{pm_low_cell}{row_link_close}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
+            f"text-align:right;vertical-align:top;'>{row_link_open}{pm_high_cell}{row_link_close}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>+{up:.1f}%</td>"
+            f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>"
+            f"{row_link_open}<span style='color:{up_color};'>+{up:.1f}%</span>{row_link_close}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>{catalyst_text}</td>"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>"
+            f"{row_link_open}<span style='color:{WHITE_DIM};'>{catalyst_text}</span>{row_link_close}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"text-align:center;vertical-align:top;'>{source_html}</td>"
             f"</tr>"
