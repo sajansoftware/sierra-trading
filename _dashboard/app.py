@@ -1586,24 +1586,27 @@ def main() -> None:
 
     # Top-of-dashboard search bar — opens the catalyst dialog for any
     # ticker the user types, regardless of which sector page is loaded.
-    sc1, sc2 = st.columns([6, 1])
-    with sc1:
-        search_q = st.text_input(
-            "Ticker lookup",
-            key="ticker_search",
-            label_visibility="collapsed",
-            placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
-        )
-    with sc2:
-        do_search = st.button("Look up", use_container_width=True,
-                              key="ticker_search_btn")
-    if (do_search or search_q) and search_q.strip():
+    # Wrapped in a form so submitting (Enter or Look up) clears the
+    # input automatically — Streamlit forbids writing to a widget's
+    # session_state key directly.
+    with st.form("ticker_search_form", clear_on_submit=True):
+        sc1, sc2 = st.columns([6, 1])
+        with sc1:
+            search_q = st.text_input(
+                "Ticker lookup",
+                key="ticker_search",
+                label_visibility="collapsed",
+                placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
+            )
+        with sc2:
+            do_search = st.form_submit_button(
+                "Look up", use_container_width=True,
+            )
+    if do_search and search_q.strip():
         tkr = search_q.strip().upper()
-        # Validate vaguely — letters / digits / dots only, 1-6 chars
         import re as _re
         if _re.fullmatch(r"[A-Z0-9.\-]{1,8}", tkr):
             st.session_state.selected_ticker = tkr
-            st.session_state.ticker_search = ""
             st.rerun()
 
     def _reset_view():
