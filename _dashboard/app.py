@@ -34,7 +34,6 @@ from data import (
     tv_num,
 )
 from changelog import record_snapshot, recent_events
-from sentiment_intel import sector_sentiment_snapshot, briefing_lines
 import universe as bio_universe
 import tech_universe
 import energy_universe
@@ -948,46 +947,6 @@ def changelog_dialog() -> None:
 
 
 # =============================================================================
-# Sentiment briefing card
-# =============================================================================
-def render_sentiment_briefing(snap) -> None:
-    """Visible card with the desk's current sentiment read + patterns."""
-    skew = snap.skew
-    skew_col = {
-        "Bullish": GOOD,
-        "Bearish": DANGER,
-        "Mixed":   WARN,
-        "Thin":    WHITE_MUTE,
-    }.get(skew, WHITE_MUTE)
-    lines = briefing_lines(snap)
-    bullets = "".join(
-        f"<li style='margin:4px 0;color:{WHITE_DIM};'>{ln}</li>" for ln in lines
-    ) if lines else (
-        f"<li style='color:{WHITE_MUTE};font-style:italic;'>"
-        f"Quiet tape — no notable patterns.</li>"
-    )
-
-    st.markdown(
-        f"""<div style="background:{NAVY_CARD};border:1px solid {BORDER};
-              border-left:4px solid {skew_col};border-radius:10px;
-              padding:14px 18px;margin-bottom:18px;">
-          <div style="display:flex;justify-content:space-between;
-              align-items:center;margin-bottom:8px;">
-            <div style="font-size:0.7rem;color:{WHITE_MUTE};
-              text-transform:uppercase;letter-spacing:1px;">
-              Sentiment briefing &middot; {snap.window_days}-day window</div>
-            <div style="font-size:0.72rem;font-weight:700;color:{skew_col};
-              text-transform:uppercase;letter-spacing:1px;">{skew} &middot;
-              {snap.bull} bull / {snap.bear} bear / {snap.neutral} neut</div>
-          </div>
-          <ul style="margin:0;padding-left:18px;font-size:0.85rem;
-            line-height:1.55;">{bullets}</ul>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-
-
-# =============================================================================
 # Today's top moves
 # =============================================================================
 def render_top_movers() -> None:
@@ -1806,17 +1765,6 @@ def main() -> None:
         record_snapshot(main_cat, all_quotes)
     except Exception:
         pass
-
-    # Compute sentiment snapshot once per render for the briefing card.
-    try:
-        tickers_list = sorted({q.ticker for syms in by_cat.values() for q in syms})
-        snap = sector_sentiment_snapshot(
-            main_cat, tuple(tickers_list), window_days=7,
-        )
-    except Exception:
-        snap = None
-    if snap is not None:
-        render_sentiment_briefing(snap)
 
     render_sector(main_cat, selected_folder, by_cat.get(selected_folder, []), uni_mod.INFO)
 
