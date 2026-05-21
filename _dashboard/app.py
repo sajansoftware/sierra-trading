@@ -1095,136 +1095,6 @@ def render_top_movers() -> None:
 
 
 # =============================================================================
-# Gemini classification page
-# =============================================================================
-def render_gemini_classification() -> None:
-    from gemini_classifier import (
-        classify_batch, stats, is_configured, cached_classification,
-    )
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">AI Classification</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">Sector / Sub-Sector via Gemini</div>
-        <div style="font-size:0.88rem;color:{WHITE_DIM};margin-bottom:22px;">
-          Replaces keyword industry rules with a semantic LLM call.
-          Results cache to disk forever — the dashboard then looks the
-          ticker up locally on every load (no per-render API cost).</div>""",
-        unsafe_allow_html=True,
-    )
-
-    s = stats()
-    configured = s["configured"]
-    total_cached = s["total_classified"]
-    if not configured:
-        st.warning(
-            "GEMINI_API_KEY is not set. Add it to your environment or "
-            "to `.streamlit/secrets.toml` to enable LLM classification. "
-            "Until then the dashboard uses the keyword rule fallback."
-        )
-
-    # Snapshot cache stats
-    st.markdown(
-        f"""<div style="display:flex;gap:24px;margin-bottom:18px;">
-          <span style="color:{WHITE};font-weight:600;">Cached: {total_cached}</span>
-          <span style="color:{WHITE_DIM};">Sectors covered: {len(s['by_sector'])}</span>
-          <span style="color:{WHITE_DIM};">Taxonomy hash: {s['taxonomy_hash'] or '—'}</span>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-
-    # Pull screener universe for the run
-    from screener import fetch_nasdaq_universe, _parse_price
-    raw = fetch_nasdaq_universe()
-    candidates: list[dict] = []
-    for r in raw:
-        sym = (r.get("symbol") or "").strip().upper()
-        if not sym or any(c in sym for c in ".^$/"):
-            continue
-        price = _parse_price(r.get("lastsale"))
-        if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
-            continue
-        candidates.append({
-            "ticker":   sym,
-            "name":     (r.get("name") or "").strip(),
-            "sector":   (r.get("sector") or "").strip(),
-            "industry": (r.get("industry") or "").strip(),
-        })
-
-    # Build the taxonomy from SECTORS so Gemini gets the exact options
-    taxonomy = {sec: list(branches.keys()) for sec, branches in SECTORS.items()}
-    uncached = [c for c in candidates if cached_classification(c["ticker"]) is None]
-    st.caption(f"In $1–$20 universe: {len(candidates)} tickers · "
-               f"unclassified: {len(uncached)}")
-
-    n_default = 50 if len(uncached) > 50 else len(uncached)
-    if n_default == 0:
-        st.success("All in-screen tickers are already classified by Gemini.")
-    else:
-        n = st.slider("Tickers to classify this run",
-                      min_value=10, max_value=min(500, len(uncached)),
-                      value=min(50, len(uncached)),
-                      step=10)
-        if st.button("▶ Run Gemini classification",
-                     type="primary",
-                     disabled=not configured,
-                     key="gemini_run_btn"):
-            batch = uncached[:n]
-            prog = st.progress(0, text="Starting…")
-            def _on_progress(done, total, msg):
-                pct = int(done / total * 100) if total else 100
-                prog.progress(min(100, pct),
-                              text=f"{done}/{total} · {msg}")
-            out = classify_batch(batch, taxonomy, progress_cb=_on_progress)
-            prog.empty()
-            st.success(f"Classified {len(out)} new tickers via Gemini. "
-                       "Reload any sector page to see them re-bucketed.")
-            # Show what changed
-            if out:
-                rows = []
-                for tkr, rec in list(out.items())[:30]:
-                    rows.append(
-                        f"<tr><td style='padding:6px 10px;color:{WHITE};'>{tkr}</td>"
-                        f"<td style='padding:6px 10px;color:{WHITE_DIM};'>{rec['sector']}</td>"
-                        f"<td style='padding:6px 10px;color:{WHITE_DIM};'>{rec['sub_sector']}</td>"
-                        f"<td style='padding:6px 10px;color:{WHITE_MUTE};font-size:0.78rem;'>{rec.get('rationale','')}</td></tr>"
-                    )
-                st.markdown(
-                    f"<table class='sierra-table' style='margin-top:14px;'>"
-                    f"<thead><tr>"
-                    f"<th style='padding:8px 10px;text-align:left;color:{WHITE_MUTE};'>Ticker</th>"
-                    f"<th style='padding:8px 10px;text-align:left;color:{WHITE_MUTE};'>Sector</th>"
-                    f"<th style='padding:8px 10px;text-align:left;color:{WHITE_MUTE};'>Sub-Sector</th>"
-                    f"<th style='padding:8px 10px;text-align:left;color:{WHITE_MUTE};'>Rationale</th>"
-                    f"</tr></thead><tbody>{''.join(rows)}</tbody></table>",
-                    unsafe_allow_html=True,
-                )
-
-    # Coverage breakdown
-    if s["by_sector"]:
-        st.markdown(
-            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
-            f"text-transform:uppercase;letter-spacing:1px;"
-            f"margin:20px 0 8px;'>Coverage by sector</div>",
-            unsafe_allow_html=True,
-        )
-        chips = []
-        for sec, n in sorted(s["by_sector"].items(),
-                              key=lambda kv: -kv[1]):
-            chips.append(
-                f"<div style='display:inline-block;margin:0 8px 8px 0;"
-                f"padding:6px 10px;background:{NAVY_CARD};"
-                f"border:1px solid {BORDER};border-radius:6px;'>"
-                f"<span style='color:{WHITE};font-weight:600;'>{sec}</span> "
-                f"<span style='color:{ACCENT};font-weight:700;'>{n}</span>"
-                f"</div>"
-            )
-        st.markdown("".join(chips), unsafe_allow_html=True)
-
-
-# =============================================================================
 # Operations — catalyst-classifier QA agent
 # =============================================================================
 def render_operations() -> None:
@@ -1857,31 +1727,21 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             if st.button(
-                "🛠 Operations",
-                use_container_width=True,
-                key="operations_btn",
-                type="primary" if st.session_state.view == "operations" else "secondary",
-            ):
-                st.session_state.view = "operations"
-                st.rerun()
-
-            if st.button(
-                "🤖 AI Classification",
-                use_container_width=True,
-                key="ai_classify_btn",
-                type="primary" if st.session_state.view == "ai_classify" else "secondary",
-                help="Use Google Gemini to classify tickers into sector / sub-sector",
-            ):
-                st.session_state.view = "ai_classify"
-                st.rerun()
-
-            if st.button(
                 "💡 Mia (Performance Coach)",
                 use_container_width=True,
                 key="mia_btn",
                 type="primary" if st.session_state.view == "mia" else "secondary",
             ):
                 st.session_state.view = "mia"
+                st.rerun()
+
+            if st.button(
+                "🛠 Operations",
+                use_container_width=True,
+                key="operations_btn",
+                type="primary" if st.session_state.view == "operations" else "secondary",
+            ):
+                st.session_state.view = "operations"
                 st.rerun()
 
     if is_journal:
@@ -1892,16 +1752,12 @@ def main() -> None:
         render_top_movers()
         return
 
-    if st.session_state.view in ("operations", "aidan"):
-        render_operations()
-        return
-
-    if st.session_state.view == "ai_classify":
-        render_gemini_classification()
-        return
-
     if st.session_state.view == "mia":
         render_mia_coach()
+        return
+
+    if st.session_state.view in ("operations", "aidan"):
+        render_operations()
         return
 
     if st.session_state.view == "ipo":
