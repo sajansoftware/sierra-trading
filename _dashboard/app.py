@@ -1695,7 +1695,7 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "🛠 Operations",
+                "🛠 Aidan (Operations)",
                 use_container_width=True,
                 key="operations_btn",
                 type="primary" if st.session_state.view == "operations" else "secondary",
