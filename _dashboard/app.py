@@ -949,6 +949,171 @@ def changelog_dialog() -> None:
 # =============================================================================
 # Sierra Voice — knowledge-base agent
 # =============================================================================
+def _voice_payload_json() -> str:
+    """JSON payload the voice widget consumes. Cheap — pure dict reads."""
+    import json
+    from kb_agent import build_payload
+    payload = build_payload(
+        SECTORS,
+        (bio_universe, tech_universe, energy_universe, industrials_universe,
+         materials_universe, consumer_disc_universe, financials_universe,
+         comm_services_universe, consumer_staples_universe,
+         real_estate_universe, healthcare_svc_universe),
+    )
+    return json.dumps(payload)
+
+
+def render_voice_widget_sidebar() -> None:
+    """Compact voice agent that sits in the sidebar, available on every
+    page. Same intent engine as the full-page version, narrower UI."""
+    import streamlit.components.v1 as components
+    payload_json = _voice_payload_json()
+
+    html = f"""
+<div id="sv-w-root" style="font-family:-apple-system,Segoe UI,sans-serif;color:#e2e8f0;">
+  <div style="background:#0f1a2e;border:1px solid #1e293b;border-radius:10px;
+       padding:12px;">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">
+      <button id="svw-mic" style="flex:0 0 40px;height:40px;border-radius:50%;
+        background:#64b5f6;color:#06121e;font-size:1.1rem;border:none;
+        cursor:pointer;font-weight:700;">🎙️</button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.62rem;color:#94a3b8;text-transform:uppercase;
+          letter-spacing:1px;line-height:1.2;">Sierra Voice</div>
+        <div id="svw-status" style="font-size:0.68rem;color:#94a3b8;
+          line-height:1.3;">Tap mic to ask</div>
+      </div>
+    </div>
+    <input id="svw-text" type="text" placeholder="…or type"
+      style="width:100%;background:#ffffff;color:#000000;border:1px solid #1e293b;
+      border-radius:6px;padding:6px 8px;font-size:0.78rem;outline:none;
+      box-sizing:border-box;margin-bottom:6px;" />
+    <div id="svw-transcript" style="font-size:0.72rem;color:#e2e8f0;
+      min-height:14px;line-height:1.35;margin-bottom:4px;"></div>
+    <div id="svw-answer" style="background:#06121e;border:1px solid #1e293b;
+      border-left:3px solid #64b5f6;border-radius:6px;padding:8px 10px;
+      font-size:0.74rem;line-height:1.45;color:#e2e8f0;display:none;
+      max-height:200px;overflow-y:auto;"></div>
+    <div id="svw-controls" style="display:none;gap:6px;margin-top:6px;">
+      <button id="svw-replay" style="background:#1e293b;color:#e2e8f0;
+        border:1px solid #1e293b;border-radius:5px;padding:4px 8px;
+        font-size:0.65rem;cursor:pointer;flex:1;">🔊 Replay</button>
+      <button id="svw-stop" style="background:#1e293b;color:#e2e8f0;
+        border:1px solid #1e293b;border-radius:5px;padding:4px 8px;
+        font-size:0.65rem;cursor:pointer;flex:1;">⏹ Stop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  const KB = {payload_json};
+  const elMic = document.getElementById("svw-mic");
+  const elStatus = document.getElementById("svw-status");
+  const elText = document.getElementById("svw-text");
+  const elTr = document.getElementById("svw-transcript");
+  const elAns = document.getElementById("svw-answer");
+  const elCtrl = document.getElementById("svw-controls");
+  const elReplay = document.getElementById("svw-replay");
+  const elStop = document.getElementById("svw-stop");
+  let lastAnswer = "";
+
+  function normalize(s) {{
+    return (s || "").toLowerCase().replace(/[^a-z0-9 \\-]/g, " ")
+      .replace(/\\s+/g, " ").trim();
+  }}
+  function escapeHtml(s) {{
+    return (s || "").replace(/[&<>"]/g, c => ({{
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"
+    }}[c]));
+  }}
+  function answerQuestion(q) {{
+    const t = normalize(q);
+    if (!t) return "I didn't catch that.";
+    for (const f of KB.faq) for (const p of f.q) if (t.includes(p)) return f.a;
+    if (/list sectors|what sectors|all sectors/.test(t))
+      return "Sectors: " + KB.sectors.join(", ") + ".";
+    const keys = Object.keys(KB.kb_terms).sort((a, b) => b.length - a.length);
+    for (const k of keys) if (t.includes(k)) return KB.kb_terms[k];
+    const syn = {{
+      "relative volume": "rvol", "volume weighted": "vwap",
+      "short squeeze": "short interest", "pattern day": "pdt",
+      "complete response": "crl", "five ten k": "510k", "510 k": "510k",
+    }};
+    for (const [p, k] of Object.entries(syn))
+      if (t.includes(p) && KB.kb_terms[k]) return KB.kb_terms[k];
+    const cands = new Set();
+    (q.match(/\\b[A-Z]{{1,5}}\\b/g) || []).forEach(x => cands.add(x.toUpperCase()));
+    t.split(" ").forEach(x => {{ if (x.length>=1 && x.length<=5) cands.add(x.toUpperCase()); }});
+    for (const sym of cands) {{
+      if (KB.tickers[sym]) {{
+        const m = KB.tickers[sym];
+        return sym + ", " + m.name + ". " + (m.blurb || "No description on file.");
+      }}
+    }}
+    if (/criteria|filter|screen|universe/.test(t)) return "Screen: " + KB.criteria;
+    return "Not in my knowledge base yet. Try a trading term or a ticker.";
+  }}
+  function speak(text) {{
+    try {{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0; window.speechSynthesis.speak(u);
+    }} catch (_) {{}}
+  }}
+  function answer(q) {{
+    if (!q || !q.trim()) return;
+    const a = answerQuestion(q);
+    lastAnswer = a;
+    elAns.style.display = "block";
+    elAns.innerHTML =
+      "<div style='font-size:0.62rem;color:#94a3b8;margin-bottom:3px;'>You</div>"
+      + "<div style='color:#fff;margin-bottom:6px;'>" + escapeHtml(q) + "</div>"
+      + "<div style='font-size:0.62rem;color:#94a3b8;margin-bottom:3px;'>Sierra</div>"
+      + "<div>" + escapeHtml(a) + "</div>";
+    elCtrl.style.display = "flex";
+    speak(a);
+  }}
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, on = false;
+  if (SR) {{
+    rec = new SR();
+    rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
+    rec.onstart = () => {{ on = true; elStatus.textContent = "Listening…";
+      elMic.style.background = "#ef4444"; elMic.textContent = "🛑"; }};
+    rec.onresult = (ev) => {{
+      let it = "", fin = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {{
+        const r = ev.results[i];
+        if (r.isFinal) fin += r[0].transcript; else it += r[0].transcript;
+      }}
+      elTr.textContent = (fin || it || "").trim();
+      if (fin) {{ elText.value = fin.trim(); answer(fin.trim()); }}
+    }};
+    rec.onerror = (e) => {{ elStatus.textContent = "Mic: " + (e.error || "?"); }};
+    rec.onend = () => {{ on = false; elStatus.textContent = "Tap mic to ask";
+      elMic.style.background = "#64b5f6"; elMic.textContent = "🎙️"; }};
+  }} else {{
+    elStatus.textContent = "Voice n/a — type instead";
+    elMic.style.opacity = 0.4; elMic.style.cursor = "not-allowed";
+  }}
+  elMic.addEventListener("click", () => {{
+    if (!rec) return;
+    if (on) rec.stop(); else {{ elTr.textContent = ""; rec.start(); }}
+  }});
+  elText.addEventListener("keydown", (e) => {{
+    if (e.key === "Enter") {{ e.preventDefault();
+      const v = elText.value.trim(); if (v) answer(v); }}
+  }});
+  elReplay.addEventListener("click", () => {{ if (lastAnswer) speak(lastAnswer); }});
+  elStop.addEventListener("click", () => {{ try {{ window.speechSynthesis.cancel(); }} catch(_) {{}} }});
+}})();
+</script>
+"""
+    components.html(html, height=330, scrolling=False)
+
+
 def render_voice_agent() -> None:
     import json
     import streamlit.components.v1 as components
@@ -1995,6 +2160,18 @@ def main() -> None:
             ):
                 st.session_state.view = "voice"
                 st.rerun()
+
+        # ---------- Voice widget (always-on sidebar) ----------
+        st.markdown(
+            f"""<div style="margin-top:18px;padding-top:14px;
+              border-top:1px solid {BORDER};">
+              <div style="font-size:0.7rem;color:{WHITE_MUTE};
+                text-transform:uppercase;letter-spacing:1px;
+                margin-bottom:8px;">Voice Agent</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        render_voice_widget_sidebar()
 
     if is_journal:
         render_journal()
