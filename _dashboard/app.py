@@ -1568,14 +1568,37 @@ def render_top_movers() -> None:
         st.info("No tickers in the universe moved ≥ 20% during pre-market today.")
         return
 
+    # Build sector / sub-sector lookup from the screener so each mover
+    # row can carry its GICS classification. Cheap — fetch_nasdaq_universe
+    # is 24h-cached and classify_ticker_sector is pure dict lookup.
+    sector_lookup: dict[str, tuple[str, str]] = {}
+    try:
+        from screener import fetch_nasdaq_universe, classify_ticker_sector
+        for nrow in fetch_nasdaq_universe():
+            sym = (nrow.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            cls = classify_ticker_sector(nrow)
+            if cls is None:
+                continue
+            sector_lookup[sym] = cls
+    except Exception:
+        pass
+
+    def _human_sub_label(sec: str, sub_key: str) -> str:
+        try:
+            return SECTORS[sec][sub_key][0]
+        except Exception:
+            return sub_key.replace("_", " ")
+
     head_cells = "".join(
         f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
         f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
         f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Ticker","left"), ("PM Low","right"), ("PM High","right"),
-            ("PM Move","right"), ("Type","left"),
+            ("Ticker","left"), ("Sector","left"), ("PM Low","right"),
+            ("PM High","right"), ("PM Move","right"), ("Type","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
     )
@@ -1612,20 +1635,39 @@ def render_top_movers() -> None:
             )
         move = r["move_pct"]
         move_color = GOOD if move >= 50 else (WARN if move >= 30 else ACCENT)
+
+        cls = sector_lookup.get(r["ticker"])
+        if cls:
+            sec, sub = cls
+            sub_label = _human_sub_label(sec, sub)
+            sector_html = (
+                f"<div style='color:{WHITE};font-size:0.82rem;"
+                f"font-weight:600;line-height:1.25;'>{sec}</div>"
+                f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
+                f"line-height:1.25;'>{sub_label}</div>"
+            )
+        else:
+            sector_html = f"<span style='color:#64748b;'>—</span>"
+
         body_rows.append(
             f"<tr>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{ticker_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};text-align:right;'>${r['lod']:.2f}</td>"
+            f"vertical-align:top;'>{ticker_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};text-align:right;font-weight:600;'>${r['hod']:.2f}</td>"
+            f"vertical-align:top;'>{sector_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{move_color};text-align:right;font-weight:700;'>+{move:.1f}%</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};'>{type_badge}</td>"
+            f"color:{WHITE_DIM};text-align:right;vertical-align:top;'>${r['lod']:.2f}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;'>{catalyst_text}</td>"
+            f"color:{WHITE};text-align:right;font-weight:600;vertical-align:top;'>${r['hod']:.2f}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;'>{source_html}</td>"
+            f"color:{move_color};text-align:right;font-weight:700;vertical-align:top;'>+{move:.1f}%</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{type_badge}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;"
+            f"vertical-align:top;'>{catalyst_text}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;vertical-align:top;'>{source_html}</td>"
             f"</tr>"
         )
 
