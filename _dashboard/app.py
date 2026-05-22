@@ -947,6 +947,286 @@ def changelog_dialog() -> None:
 
 
 # =============================================================================
+# Sierra Voice — knowledge-base agent
+# =============================================================================
+def render_voice_agent() -> None:
+    import json
+    import streamlit.components.v1 as components
+    from kb_agent import build_payload
+
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Sierra Voice</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Knowledge Base Agent</div>
+        <div style="font-size:0.88rem;color:{WHITE_DIM};margin-bottom:22px;
+          max-width:760px;">
+          Click the mic and ask anything about trading concepts (RVOL, VWAP,
+          gap-and-go, PDUFA, halt resumption, …), the dashboard's screen
+          rules, or any ticker in the curated universe. Voice in, voice
+          out — no API calls, no recording leaves your browser.
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    payload = build_payload(
+        SECTORS,
+        (bio_universe, tech_universe, energy_universe, industrials_universe,
+         materials_universe, consumer_disc_universe, financials_universe,
+         comm_services_universe, consumer_staples_universe,
+         real_estate_universe, healthcare_svc_universe),
+    )
+    payload_json = json.dumps(payload)
+
+    html = f"""
+<div id="sierra-voice-root" style="font-family:-apple-system,Segoe UI,sans-serif;color:#e2e8f0;">
+  <div id="sv-card" style="background:#0f1a2e;border:1px solid #1e293b;
+       border-radius:12px;padding:22px;max-width:760px;">
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:18px;">
+      <button id="sv-mic" style="flex:0 0 64px;height:64px;border-radius:50%;
+        background:#64b5f6;color:#06121e;font-size:1.6rem;border:none;
+        cursor:pointer;font-weight:700;box-shadow:0 4px 14px rgba(100,181,246,0.35);
+        transition:all 0.15s;">🎙️</button>
+      <div style="flex:1;min-width:0;">
+        <div id="sv-status" style="font-size:0.78rem;color:#94a3b8;
+          text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">
+          Tap the mic to begin</div>
+        <div id="sv-transcript" style="font-size:1rem;color:#ffffff;
+          min-height:24px;line-height:1.4;">&nbsp;</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:18px;">
+      <input id="sv-text" type="text" placeholder="…or type your question"
+        style="flex:1;background:#ffffff;color:#000000;border:1px solid #1e293b;
+        border-radius:8px;padding:10px 12px;font-size:0.92rem;outline:none;" />
+      <button id="sv-ask" style="background:#64b5f6;color:#06121e;
+        border:none;border-radius:8px;padding:0 18px;font-weight:700;
+        cursor:pointer;font-size:0.9rem;">Ask</button>
+    </div>
+
+    <div id="sv-answer" style="background:#06121e;border:1px solid #1e293b;
+      border-left:4px solid #64b5f6;border-radius:8px;padding:14px 18px;
+      min-height:80px;font-size:0.95rem;line-height:1.55;color:#e2e8f0;
+      display:none;">
+    </div>
+
+    <div id="sv-controls" style="margin-top:10px;display:none;gap:8px;">
+      <button id="sv-replay" style="background:#1e293b;color:#e2e8f0;
+        border:1px solid #1e293b;border-radius:6px;padding:7px 12px;
+        font-size:0.78rem;cursor:pointer;">🔊 Hear again</button>
+      <button id="sv-stop" style="background:#1e293b;color:#e2e8f0;
+        border:1px solid #1e293b;border-radius:6px;padding:7px 12px;
+        font-size:0.78rem;cursor:pointer;">⏹ Stop voice</button>
+    </div>
+
+    <div style="margin-top:18px;font-size:0.72rem;color:#64748b;line-height:1.5;">
+      Tip — try: "what is RVOL", "explain VWAP reclaim", "what's the screen",
+      "list sectors", "tell me about NVDA", "what is a complete response letter".
+      Voice recognition uses your browser; works best in Chrome and Edge.
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  const KB = {payload_json};
+  const elMic = document.getElementById("sv-mic");
+  const elStatus = document.getElementById("sv-status");
+  const elTranscript = document.getElementById("sv-transcript");
+  const elText = document.getElementById("sv-text");
+  const elAsk = document.getElementById("sv-ask");
+  const elAnswer = document.getElementById("sv-answer");
+  const elControls = document.getElementById("sv-controls");
+  const elReplay = document.getElementById("sv-replay");
+  const elStop = document.getElementById("sv-stop");
+
+  let lastAnswer = "";
+
+  // ---- Intent engine ----
+  function normalize(s) {{
+    return (s || "").toLowerCase()
+      .replace(/[^a-z0-9 \\-]/g, " ")
+      .replace(/\\s+/g, " ").trim();
+  }}
+
+  function answerQuestion(q) {{
+    const t = normalize(q);
+    if (!t) return "I didn't catch that. Try asking about a trading term.";
+
+    // FAQ pass — exact phrase match wins.
+    for (const f of KB.faq) {{
+      for (const phrase of f.q) {{
+        if (t.includes(phrase)) return f.a;
+      }}
+    }}
+
+    // Sector list
+    if (/list sectors|what sectors|sectors do you cover|all sectors/.test(t)) {{
+      return "The sectors I cover are: " + KB.sectors.join(", ") + ".";
+    }}
+
+    // KB term lookup — longest matching key wins so "vwap reclaim"
+    // beats "vwap".
+    const keys = Object.keys(KB.kb_terms).sort((a, b) => b.length - a.length);
+    for (const k of keys) {{
+      if (t.includes(k)) {{
+        return KB.kb_terms[k];
+      }}
+    }}
+
+    // Common synonyms / loose phrasing
+    const synonym = {{
+      "relative volume":  "rvol",
+      "volume weighted":  "vwap",
+      "short squeeze":    "short interest",
+      "pattern day":      "pdt",
+      "pre-market":       "atm offering",
+      "complete response": "crl",
+      "five ten k":       "510k",
+      "510 k":            "510k",
+      "kill switch":      "kill switch",
+    }};
+    for (const [phrase, key] of Object.entries(synonym)) {{
+      if (t.includes(phrase) && KB.kb_terms[key]) return KB.kb_terms[key];
+    }}
+
+    // Ticker lookup — pull any 1-5 letter uppercase token from the
+    // ORIGINAL (case-preserving) query, plus alpha tokens from
+    // normalized.
+    const origTokens = (q.match(/\\b[A-Z]{{1,5}}\\b/g) || []);
+    const lowerTokens = t.split(" ");
+    const cands = new Set();
+    origTokens.forEach(x => cands.add(x.toUpperCase()));
+    lowerTokens.forEach(x => {{
+      if (x.length >= 1 && x.length <= 5) cands.add(x.toUpperCase());
+    }});
+    for (const sym of cands) {{
+      if (KB.tickers[sym]) {{
+        const m = KB.tickers[sym];
+        return sym + ", " + m.name + ". " + (m.blurb || "No description on file.");
+      }}
+    }}
+
+    // Criteria fallback
+    if (/criteria|filter|screen|universe/.test(t)) {{
+      return "The screen is: " + KB.criteria;
+    }}
+
+    return ("I don't have that one in the knowledge base yet. Try asking "
+          + "about a trading term, the screen rules, or a specific ticker.");
+  }}
+
+  // ---- TTS ----
+  function speak(text) {{
+    try {{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      window.speechSynthesis.speak(u);
+    }} catch (e) {{
+      console.warn("TTS unavailable", e);
+    }}
+  }}
+
+  function answer(q) {{
+    if (!q || !q.trim()) return;
+    const a = answerQuestion(q);
+    lastAnswer = a;
+    elAnswer.style.display = "block";
+    elAnswer.innerHTML = "<div style='font-size:0.7rem;color:#94a3b8;"
+      + "text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>"
+      + "You asked</div>"
+      + "<div style='color:#ffffff;margin-bottom:10px;'>" + escapeHtml(q) + "</div>"
+      + "<div style='font-size:0.7rem;color:#94a3b8;"
+      + "text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>"
+      + "Sierra</div>"
+      + "<div>" + escapeHtml(a) + "</div>";
+    elControls.style.display = "flex";
+    speak(a);
+  }}
+
+  function escapeHtml(s) {{
+    return (s || "").replace(/[&<>"]/g, c => ({{
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+    }}[c]));
+  }}
+
+  // ---- Speech recognition ----
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null, listening = false;
+  if (SR) {{
+    recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onstart = () => {{
+      listening = true;
+      elStatus.textContent = "Listening…";
+      elMic.style.background = "#ef4444";
+      elMic.textContent = "🛑";
+    }};
+    recognition.onresult = (ev) => {{
+      let interim = "", finalText = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {{
+        const r = ev.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }}
+      elTranscript.textContent = (finalText || interim || "").trim() || "\\u00a0";
+      if (finalText) {{
+        elText.value = finalText.trim();
+        answer(finalText.trim());
+      }}
+    }};
+    recognition.onerror = (e) => {{
+      elStatus.textContent = "Mic error: " + (e.error || "unknown");
+    }};
+    recognition.onend = () => {{
+      listening = false;
+      elStatus.textContent = "Tap the mic to begin";
+      elMic.style.background = "#64b5f6";
+      elMic.textContent = "🎙️";
+    }};
+  }} else {{
+    elStatus.textContent = "Voice input not supported in this browser — type instead";
+    elMic.style.opacity = 0.4;
+    elMic.style.cursor = "not-allowed";
+  }}
+
+  elMic.addEventListener("click", () => {{
+    if (!recognition) return;
+    if (listening) recognition.stop();
+    else {{
+      elTranscript.textContent = "\\u00a0";
+      recognition.start();
+    }}
+  }});
+
+  elAsk.addEventListener("click", () => {{
+    const v = elText.value.trim();
+    if (v) answer(v);
+  }});
+  elText.addEventListener("keydown", (e) => {{
+    if (e.key === "Enter") {{
+      e.preventDefault();
+      const v = elText.value.trim();
+      if (v) answer(v);
+    }}
+  }});
+
+  elReplay.addEventListener("click", () => {{ if (lastAnswer) speak(lastAnswer); }});
+  elStop.addEventListener("click", () => {{ try {{ window.speechSynthesis.cancel(); }} catch (_) {{}} }});
+}})();
+</script>
+"""
+    components.html(html, height=540, scrolling=False)
+
+
+# =============================================================================
 # Today's top moves
 # =============================================================================
 def render_top_movers() -> None:
@@ -1706,6 +1986,16 @@ def main() -> None:
                 st.session_state.view = "operations"
                 st.rerun()
 
+            if st.button(
+                "🎙️ Sierra Voice",
+                use_container_width=True,
+                key="voice_btn",
+                type="primary" if st.session_state.view == "voice" else "secondary",
+                help="Voice-driven trading knowledge base",
+            ):
+                st.session_state.view = "voice"
+                st.rerun()
+
     if is_journal:
         render_journal()
         return
@@ -1720,6 +2010,10 @@ def main() -> None:
 
     if st.session_state.view in ("operations", "aidan"):
         render_operations()
+        return
+
+    if st.session_state.view == "voice":
+        render_voice_agent()
         return
 
     if st.session_state.view == "ipo":
