@@ -2249,7 +2249,7 @@ def main() -> None:
     def _reset_view():
         st.session_state.view = "sector"
 
-    category_keys = list(SECTORS.keys()) + ["Trading Journal"]
+    category_keys = sorted(SECTORS.keys()) + ["Trading Journal"]
 
     with st.sidebar:
         st.markdown(
