@@ -352,6 +352,28 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
 }
 
 
+def keyword_classify(row: dict) -> tuple[str, str] | None:
+    """Run only the deterministic keyword + NASDAQ-sector passes.
+
+    Exposed separately so the background Gemini worker can compute
+    each ticker's *current* rule-based assignment and ask Gemini to
+    validate it. Excludes the Gemini cache pass.
+    """
+    industry = (row.get("industry") or "").strip()
+    sector_str = (row.get("sector") or "").strip()
+    name = row.get("name") or ""
+    mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
+    if mapped is not None:
+        sector, sub = mapped
+        if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
+            sub = "Crypto_Adjacent"
+        return sector, sub
+    fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str) or SECTOR_INDUSTRIAL
+    if fallback_sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
+        return SECTOR_FINANCIALS, "Crypto_Adjacent"
+    return fallback_sector, "Other"
+
+
 def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     """Return (sector_key, sub_sector_folder) for a NASDAQ screener row.
 
@@ -382,21 +404,8 @@ def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
         except Exception:
             pass
 
-    mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
-    if mapped is not None:
-        sector, sub = mapped
-        if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
-            sub = "Crypto_Adjacent"
-        return sector, sub
-
-    # Fallback: route to the NASDAQ-declared sector's 'Other' bucket.
-    # Final fallback: tickers with no sector at all (SPACs, brand-new
-    # IPOs, ETFs) go to Industrials/Other so they still surface as long
-    # as they pass the $1-$20 + float<20M criteria.
-    fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str) or SECTOR_INDUSTRIAL
-    if fallback_sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
-        return SECTOR_FINANCIALS, "Crypto_Adjacent"
-    return fallback_sector, "Other"
+    # Passes 1 + 2: keyword / NASDAQ-sector fallback
+    return keyword_classify(row)
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)

@@ -110,46 +110,85 @@ def _api_key() -> str:
 def _build_prompt(
     companies: list[dict],
     taxonomy: dict[str, list[str]],
+    taxonomy_labels: dict[str, dict[str, str]] | None = None,
 ) -> str:
+    """Validation-style prompt: for each company, ask whether the
+    current sub-sector assignment is correct and, if not, what the
+    correct (sector, sub_sector) should be from the taxonomy.
+
+    `taxonomy_labels[sector][sub_key]` → human-readable label like
+    "Publishing & News". Defaults to underscore-stripped key when
+    labels are missing.
+    """
+    def label_of(sec: str, sub_key: str) -> str:
+        if taxonomy_labels and sec in taxonomy_labels:
+            lbl = taxonomy_labels[sec].get(sub_key)
+            if lbl:
+                return lbl
+        return sub_key.replace("_", " ")
+
     tax_lines = []
     for sec, subs in taxonomy.items():
-        tax_lines.append(f"- {sec}: {', '.join(subs)}")
+        bits = []
+        for sub in subs:
+            bits.append(f"{sub} ({label_of(sec, sub)})")
+        tax_lines.append(f"- {sec}: " + ", ".join(bits))
     tax_block = "\n".join(tax_lines)
 
     co_lines = []
     for i, c in enumerate(companies, 1):
+        cur_sec = c.get("current_sector") or "—"
+        cur_sub_key = c.get("current_sub_sector") or "—"
+        cur_label = (label_of(cur_sec, cur_sub_key)
+                     if cur_sec != "—" else "—")
         co_lines.append(
             f"{i}. TICKER {c.get('ticker','?')}"
             f" | NAME: {c.get('name','')[:80]}"
-            f" | NASDAQ_SECTOR: {c.get('sector','')[:40]}"
-            f" | NASDAQ_INDUSTRY: {c.get('industry','')[:80]}"
+            f" | NASDAQ_INDUSTRY: {c.get('industry','')[:80]}\n"
+            f"   CURRENT_ASSIGNMENT: {cur_sec} / {cur_label}"
+            f"  [sub_sector key: {cur_sub_key}]\n"
+            f"   QUESTION: Is {c.get('name','this company')} a"
+            f" \"{cur_label}\" company under \"{cur_sec}\"?"
+            f" If not, what sector and sub-sector should it fall under?"
         )
     co_block = "\n".join(co_lines)
 
-    return f"""You are a securities classification analyst. Classify each
-company into exactly one of these GICS top-level sectors AND exactly
-one of that sector's sub-sectors. Use your knowledge of each company's
-actual business from their public filings and website. Output ONLY
-valid JSON — no commentary, no markdown fences.
+    return f"""You are a securities classification analyst. For each
+company below, validate the CURRENT sub-sector assignment against
+what the company actually does based on its public filings and
+website. If the current assignment is wrong, pick the correct
+(sector, sub_sector) from the taxonomy. Output ONLY valid JSON — no
+commentary, no markdown fences.
 
-TAXONOMY (sector → sub-sectors):
+TAXONOMY (sector_key (human label), …):
 {tax_block}
 
 RULES:
-- sector MUST be one of the sector names above, character-for-character.
-- sub_sector MUST be one of that sector's listed sub-sectors,
-  character-for-character (including underscores).
-- Rely on what the company actually does, not just the NASDAQ industry
-  label which is often coarse or wrong.
-- If you are uncertain, choose the sector's "Other" sub-sector.
-- "rationale" is one short clause (≤ 12 words) explaining the pick.
+- "sector" MUST be a sector key from the taxonomy, character-for-character.
+- "sub_sector" MUST be a sub-sector KEY (underscored form) listed
+  under that sector — never the human label.
+- "is_correct" is true when the current assignment is right;
+  false when you are overriding it.
+- When is_correct is true, sector / sub_sector MUST equal the
+  CURRENT_ASSIGNMENT.
+- Rely on actual business activity, not the NASDAQ industry label
+  which is often coarse or wrong.
+- If genuinely uncertain, route to the sector's "Other" sub-sector.
+- "rationale" is one short clause (≤ 14 words) — what the company
+  actually does and why this sub-sector fits.
 
 COMPANIES:
 {co_block}
 
 OUTPUT FORMAT (JSON array, one object per company, same order):
 [
-  {{"ticker": "...", "sector": "...", "sub_sector": "...", "rationale": "..."}},
+  {{
+    "ticker": "...",
+    "is_correct": true,
+    "sector": "...",
+    "sub_sector": "...",
+    "rationale": "..."
+  }},
   ...
 ]
 """.strip()
@@ -209,13 +248,15 @@ def _validate_pick(
 def classify_batch(
     companies: list[dict],
     taxonomy: dict[str, list[str]],
+    taxonomy_labels: dict[str, dict[str, str]] | None = None,
     progress_cb=None,
 ) -> dict[str, dict]:
     """Classify a batch of companies via Gemini.
 
-    `companies` items: {ticker, name, sector, industry}
-    Returns {ticker: {sector, sub_sector, rationale}} for picks Gemini
-    produced. Skips tickers that already have a cached entry for the
+    `companies` items: {ticker, name, sector, industry,
+                        current_sector?, current_sub_sector?}
+    Returns {ticker: {sector, sub_sector, rationale, is_correct}}
+    for picks Gemini produced. Skips tickers already cached under the
     current taxonomy. Persists to cache as it goes.
     """
     if not is_configured():
@@ -235,7 +276,7 @@ def classify_batch(
     for i in range(0, total, BATCH_SIZE):
         chunk = to_run[i:i + BATCH_SIZE]
         try:
-            prompt = _build_prompt(chunk, taxonomy)
+            prompt = _build_prompt(chunk, taxonomy, taxonomy_labels)
             raw = _call_gemini(prompt)
             picks = _parse_response(raw)
         except Exception as e:
@@ -249,8 +290,10 @@ def classify_batch(
             if not valid:
                 continue
             tkr = valid["ticker"]
+            is_correct = bool(rec.get("is_correct"))
             cache[tkr] = {
                 **{k: v for k, v in valid.items() if k != "ticker"},
+                "is_correct": is_correct,
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             out[tkr] = cache[tkr]

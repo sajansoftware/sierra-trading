@@ -1604,7 +1604,9 @@ def _kickoff_background_classifier() -> None:
             )
             if not is_configured():
                 return
-            from screener import fetch_nasdaq_universe, _parse_price
+            from screener import (
+                fetch_nasdaq_universe, _parse_price, keyword_classify,
+            )
             raw = fetch_nasdaq_universe()
             todo: list[dict] = []
             for r in raw:
@@ -1616,16 +1618,26 @@ def _kickoff_background_classifier() -> None:
                     continue
                 if cached_classification(sym) is not None:
                     continue
+                # Compute the current rule-based assignment so the
+                # prompt can ask Gemini to validate or override it.
+                cur = keyword_classify(r) or (None, None)
                 todo.append({
-                    "ticker":   sym,
-                    "name":     (r.get("name") or "").strip(),
-                    "sector":   (r.get("sector") or "").strip(),
-                    "industry": (r.get("industry") or "").strip(),
+                    "ticker":             sym,
+                    "name":               (r.get("name") or "").strip(),
+                    "sector":             (r.get("sector") or "").strip(),
+                    "industry":           (r.get("industry") or "").strip(),
+                    "current_sector":     cur[0],
+                    "current_sub_sector": cur[1],
                 })
             if not todo:
                 return
             taxonomy = {sec: list(branches.keys()) for sec, branches in SECTORS.items()}
-            classify_batch(todo, taxonomy)
+            # Human labels per sub-sector key — the prompt uses these so
+            # Gemini sees "Publishing & News" instead of "Publishing_News".
+            taxonomy_labels: dict[str, dict[str, str]] = {}
+            for sec, branches in SECTORS.items():
+                taxonomy_labels[sec] = {k: v[0] for k, v in branches.items()}
+            classify_batch(todo, taxonomy, taxonomy_labels=taxonomy_labels)
         except Exception as e:
             import sys
             print(f"[bg-classifier] failed: {e}", file=sys.stderr)
