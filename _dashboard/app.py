@@ -1042,23 +1042,70 @@ def render_voice_widget_sidebar() -> None:
     }};
     for (const [p, k] of Object.entries(syn))
       if (t.includes(p) && KB.kb_terms[k]) return KB.kb_terms[k];
+    if (/how many tickers|screen size|total tickers/.test(t)) {{
+      return (KB.total_tickers || 0) + " tickers currently pass the screen.";
+    }}
+    if (/how many|count of/.test(t)) {{
+      for (const sec of KB.sectors) {{
+        if (t.includes(sec.toLowerCase())) {{
+          const n = (KB.sector_counts || {{}})[sec] || 0;
+          return sec + " has " + n + " tickers in the screen.";
+        }}
+      }}
+    }}
     const cands = new Set();
     (q.match(/\\b[A-Z]{{1,5}}\\b/g) || []).forEach(x => cands.add(x.toUpperCase()));
     t.split(" ").forEach(x => {{ if (x.length>=1 && x.length<=5) cands.add(x.toUpperCase()); }});
     for (const sym of cands) {{
       if (KB.tickers[sym]) {{
         const m = KB.tickers[sym];
-        return sym + ", " + m.name + ". " + (m.blurb || "No description on file.");
+        const parts = [sym + ", " + (m.name || "company on file") + "."];
+        if (m.blurb) parts.push(m.blurb);
+        if (m.sector && m.sub_sector)
+          parts.push("Classified under " + m.sector + " — " + m.sub_sector.replace(/_/g, " ") + ".");
+        if (m.price) parts.push("Last trade around $" + m.price + ".");
+        return parts.join(" ");
       }}
     }}
     if (/criteria|filter|screen|universe/.test(t)) return "Screen: " + KB.criteria;
     return "Not in my knowledge base yet. Try a trading term or a ticker.";
   }}
+  let svwVoice = null;
+  function svwPickBritishFemale() {{
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    const patterns = [
+      /sonia.*natural/i, /libby.*natural/i, /maisie.*natural/i,
+      /bella.*natural/i, /olivia.*natural/i, /ada.*natural/i,
+      /microsoft sonia/i, /microsoft libby/i, /microsoft maisie/i,
+      /microsoft hazel/i, /microsoft susan/i,
+      /google uk english female/i,
+      /^kate$/i, /^serena$/i, /^fiona$/i,
+      /amelia/i, /martha/i, /isobel/i, /catherine/i,
+    ];
+    for (const re of patterns) {{
+      const v = voices.find(v => re.test(v.name));
+      if (v) return v;
+    }}
+    const gb = voices.find(v => (v.lang || "").toLowerCase().startsWith("en-gb"));
+    if (gb) return gb;
+    const en = voices.find(v => (v.lang || "").toLowerCase().startsWith("en"));
+    return en || voices[0];
+  }}
+  function svwRefreshVoice() {{ svwVoice = svwPickBritishFemale(); }}
+  svwRefreshVoice();
+  if (typeof window.speechSynthesis.onvoiceschanged !== "undefined") {{
+    window.speechSynthesis.onvoiceschanged = svwRefreshVoice;
+  }}
   function speak(text) {{
     try {{
       window.speechSynthesis.cancel();
+      if (!svwVoice) svwRefreshVoice();
       const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.0; window.speechSynthesis.speak(u);
+      if (svwVoice) {{ u.voice = svwVoice; u.lang = svwVoice.lang || "en-GB"; }}
+      else {{ u.lang = "en-GB"; }}
+      u.rate = 0.98; u.pitch = 1.0;
+      window.speechSynthesis.speak(u);
     }} catch (_) {{}}
   }}
   function answer(q) {{
@@ -1292,6 +1339,24 @@ def _voice_full_html(payload_json: str) -> str:
       if (t.includes(phrase) && KB.kb_terms[key]) return KB.kb_terms[key];
     }}
 
+    // Screen size / total count
+    if (/how many tickers|screen size|how big|total tickers|how many names/.test(t)) {{
+      return "Currently " + (KB.total_tickers || 0)
+           + " tickers pass the screen across " + KB.sectors.length
+           + " sectors.";
+    }}
+
+    // Sector ticker count — "how many tech tickers" / "how many in
+    // health care"
+    if (/how many|count of|number of/.test(t)) {{
+      for (const sec of KB.sectors) {{
+        if (t.includes(sec.toLowerCase())) {{
+          const n = (KB.sector_counts || {{}})[sec] || 0;
+          return sec + " has " + n + " tickers in the screen right now.";
+        }}
+      }}
+    }}
+
     // Ticker lookup — pull any 1-5 letter uppercase token from the
     // ORIGINAL (case-preserving) query, plus alpha tokens from
     // normalized.
@@ -1305,7 +1370,14 @@ def _voice_full_html(payload_json: str) -> str:
     for (const sym of cands) {{
       if (KB.tickers[sym]) {{
         const m = KB.tickers[sym];
-        return sym + ", " + m.name + ". " + (m.blurb || "No description on file.");
+        const parts = [sym + ", " + (m.name || "company on file") + "."];
+        if (m.blurb) parts.push(m.blurb);
+        if (m.sector && m.sub_sector) {{
+          const sub = m.sub_sector.replace(/_/g, " ");
+          parts.push("Classified under " + m.sector + " — " + sub + ".");
+        }}
+        if (m.price) parts.push("Last trade around $" + m.price + ".");
+        return parts.join(" ");
       }}
     }}
 
@@ -1318,12 +1390,47 @@ def _voice_full_html(payload_json: str) -> str:
           + "about a trading term, the screen rules, or a specific ticker.");
   }}
 
-  // ---- TTS ----
+  // ---- TTS: pick the highest-quality British female voice available ----
+  let svVoice = null;
+  function pickBritishFemaleVoice() {{
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    // Preferred patterns ordered best → fallback. Neural / "Online
+    // (Natural)" voices come first, then legacy desktop voices, then
+    // any en-GB.
+    const patterns = [
+      /sonia.*natural/i, /libby.*natural/i, /maisie.*natural/i,
+      /bella.*natural/i, /olivia.*natural/i, /ada.*natural/i,
+      /microsoft sonia/i, /microsoft libby/i, /microsoft maisie/i,
+      /microsoft hazel/i, /microsoft susan/i,
+      /google uk english female/i,
+      /^kate$/i, /^serena$/i, /^fiona$/i,
+      /amelia/i, /martha/i, /isobel/i, /catherine/i,
+    ];
+    for (const re of patterns) {{
+      const v = voices.find(v => re.test(v.name));
+      if (v) return v;
+    }}
+    // Any en-GB voice
+    const gb = voices.find(v => (v.lang || "").toLowerCase().startsWith("en-gb"));
+    if (gb) return gb;
+    // Any en voice
+    const en = voices.find(v => (v.lang || "").toLowerCase().startsWith("en"));
+    return en || voices[0];
+  }}
+  function refreshVoice() {{ svVoice = pickBritishFemaleVoice(); }}
+  refreshVoice();
+  if (typeof window.speechSynthesis.onvoiceschanged !== "undefined") {{
+    window.speechSynthesis.onvoiceschanged = refreshVoice;
+  }}
   function speak(text) {{
     try {{
       window.speechSynthesis.cancel();
+      if (!svVoice) refreshVoice();
       const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.0;
+      if (svVoice) {{ u.voice = svVoice; u.lang = svVoice.lang || "en-GB"; }}
+      else {{ u.lang = "en-GB"; }}
+      u.rate = 0.98;
       u.pitch = 1.0;
       window.speechSynthesis.speak(u);
     }} catch (e) {{

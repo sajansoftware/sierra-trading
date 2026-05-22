@@ -208,26 +208,80 @@ FAQ: list[dict] = [
 ]
 
 
+MIN_PRICE = 1.0
+MAX_PRICE = 20.0
+
+
 def build_payload(sectors_dict: dict, universe_modules: Iterable) -> dict:
-    """Assemble the JSON-serializable payload the browser widget consumes."""
+    """Assemble the JSON-serializable payload the browser widget consumes.
+
+    Includes:
+      - kb_terms / faq / sectors / criteria (static knowledge)
+      - tickers: every name in the screen with sector + sub-sector +
+        last price + curated blurb (when one exists)
+      - sector_counts: ticker-count per sector across the live screen
+    """
     sectors = list(sectors_dict.keys())
 
-    # Flatten curated tickers across all sector universes. Cheap — just
-    # dict-keys reads.
+    # Layer 1: curated INFO blurbs from each sector module
     tickers: dict[str, dict] = {}
     for mod in universe_modules:
         info = getattr(mod, "INFO", None) or {}
         for sym, meta in info.items():
             tickers.setdefault(sym, {
-                "name": getattr(meta, "name", sym),
+                "name":  getattr(meta, "name", sym),
                 "blurb": getattr(meta, "blurb", ""),
             })
+
+    # Layer 2: every NASDAQ-listed ticker in the $1–$20 universe, with
+    # sector / sub-sector classification from screener.py
+    try:
+        from screener import (
+            fetch_nasdaq_universe, classify_ticker_sector, _parse_price,
+        )
+        for r in fetch_nasdaq_universe():
+            sym = (r.get("symbol") or "").strip().upper()
+            if not sym or any(c in sym for c in ".^$/"):
+                continue
+            price = _parse_price(r.get("lastsale"))
+            if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
+                continue
+            cls = classify_ticker_sector(r)
+            if cls is None:
+                continue
+            sec, sub = cls
+            existing = tickers.get(sym, {})
+            tickers[sym] = {
+                "name":       existing.get("name") or (r.get("name") or "").strip(),
+                "blurb":      existing.get("blurb", ""),
+                "sector":     sec,
+                "sub_sector": sub,
+                "price":      round(price, 2),
+                "exchange":   r.get("_exchange", ""),
+            }
+    except Exception:
+        pass
+
+    # Sector counts across the live screen
+    sector_counts: dict[str, int] = {}
+    sub_sector_counts: dict[str, int] = {}
+    for sym, m in tickers.items():
+        sec = m.get("sector")
+        if sec:
+            sector_counts[sec] = sector_counts.get(sec, 0) + 1
+        sub = m.get("sub_sector")
+        if sec and sub:
+            key = f"{sec} / {sub}"
+            sub_sector_counts[key] = sub_sector_counts.get(key, 0) + 1
 
     return {
         "kb_terms": TRADING_KB,
         "faq": FAQ,
         "sectors": sectors,
         "tickers": tickers,
+        "sector_counts": sector_counts,
+        "sub_sector_counts": sub_sector_counts,
+        "total_tickers": len(tickers),
         "criteria": ("Price between one and twenty dollars. Free float "
                      "under twenty million shares. Listed on NASDAQ, "
                      "NYSE, or AMEX."),
