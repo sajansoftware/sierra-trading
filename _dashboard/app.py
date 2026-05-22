@@ -1114,10 +1114,40 @@ def render_voice_widget_sidebar() -> None:
     components.html(html, height=330, scrolling=False)
 
 
-def render_voice_agent() -> None:
+@st.dialog("Sierra Voice", width="large")
+def voice_dialog() -> None:
+    """Modal voice agent — reuses the full-page render so it has the
+    same intent engine and KB payload, just popped over the current
+    view so the user never has to navigate away."""
+    render_voice_agent(in_dialog=True)
+    if st.button("Close", key="voice_dlg_close", use_container_width=True):
+        st.session_state.show_voice = False
+        st.rerun()
+
+
+def render_voice_agent(in_dialog: bool = False) -> None:
     import json
     import streamlit.components.v1 as components
     from kb_agent import build_payload
+
+    if in_dialog:
+        st.markdown(
+            f"<div style='font-size:0.85rem;color:{WHITE_DIM};"
+            f"margin-bottom:14px;'>Click the mic and ask anything about "
+            f"trading concepts, the screen, or any ticker in the curated "
+            f"universe.</div>",
+            unsafe_allow_html=True,
+        )
+        payload = build_payload(
+            SECTORS,
+            (bio_universe, tech_universe, energy_universe, industrials_universe,
+             materials_universe, consumer_disc_universe, financials_universe,
+             comm_services_universe, consumer_staples_universe,
+             real_estate_universe, healthcare_svc_universe),
+        )
+        payload_json = json.dumps(payload)
+        components.html(_voice_full_html(payload_json), height=520, scrolling=False)
+        return
 
     st.markdown(
         f"""<div style="margin-bottom:8px;">
@@ -1144,8 +1174,12 @@ def render_voice_agent() -> None:
          real_estate_universe, healthcare_svc_universe),
     )
     payload_json = json.dumps(payload)
+    components.html(_voice_full_html(payload_json), height=540, scrolling=False)
 
-    html = f"""
+
+def _voice_full_html(payload_json: str) -> str:
+    """Return the full-sized voice agent HTML/JS string."""
+    return f"""
 <div id="sierra-voice-root" style="font-family:-apple-system,Segoe UI,sans-serif;color:#e2e8f0;">
   <div id="sv-card" style="background:#0f1a2e;border:1px solid #1e293b;
        border-radius:12px;padding:22px;max-width:760px;">
@@ -1388,7 +1422,6 @@ def render_voice_agent() -> None:
 }})();
 </script>
 """
-    components.html(html, height=540, scrolling=False)
 
 
 # =============================================================================
@@ -2029,30 +2062,40 @@ def main() -> None:
         st.session_state.show_changelog = False
         changelog_dialog()
 
-    # Top-of-dashboard search bar — opens the catalyst dialog for any
-    # ticker the user types, regardless of which sector page is loaded.
-    # Wrapped in a form so submitting (Enter or Look up) clears the
-    # input automatically — Streamlit forbids writing to a widget's
-    # session_state key directly.
-    with st.form("ticker_search_form", clear_on_submit=True):
-        sc1, sc2 = st.columns([6, 1])
-        with sc1:
-            search_q = st.text_input(
-                "Ticker lookup",
-                key="ticker_search",
-                label_visibility="collapsed",
-                placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
-            )
-        with sc2:
-            do_search = st.form_submit_button(
-                "Look up", use_container_width=True,
-            )
+    # Top-of-dashboard row: mic icon (opens Sierra Voice dialog) + the
+    # ticker-lookup search bar. Mic stays outside the search form so
+    # submitting Enter on search doesn't trigger the dialog.
+    mic_col, search_col = st.columns([1, 18])
+    with mic_col:
+        if st.button("🎙️", key="voice_mic_btn",
+                     help="Sierra Voice — voice knowledge base"):
+            st.session_state.show_voice = True
+            st.rerun()
+    with search_col:
+        with st.form("ticker_search_form", clear_on_submit=True):
+            sc1, sc2 = st.columns([6, 1])
+            with sc1:
+                search_q = st.text_input(
+                    "Ticker lookup",
+                    key="ticker_search",
+                    label_visibility="collapsed",
+                    placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
+                )
+            with sc2:
+                do_search = st.form_submit_button(
+                    "Look up", use_container_width=True,
+                )
     if do_search and search_q.strip():
         tkr = search_q.strip().upper()
         import re as _re
         if _re.fullmatch(r"[A-Z0-9.\-]{1,8}", tkr):
             st.session_state.selected_ticker = tkr
             st.rerun()
+
+    # Voice dialog — opens on mic click; stays open across reruns until
+    # the user hits Close (mirrors the changelog / catalyst pattern).
+    if st.session_state.get("show_voice"):
+        voice_dialog()
 
     def _reset_view():
         st.session_state.view = "sector"
