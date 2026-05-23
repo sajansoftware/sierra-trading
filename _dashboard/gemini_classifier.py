@@ -36,6 +36,10 @@ from pathlib import Path
 CACHE_PATH = Path(__file__).resolve().parent / ".gemini_classify_cache.json"
 MODEL_NAME = "gemini-2.5-flash"
 BATCH_SIZE = 25
+# Bump when the prompt format changes — any cache built under a
+# different version is wiped on load so every ticker re-runs through
+# the current prompt.
+PROMPT_VERSION = "v2-validation"
 
 
 # ----------------------------------------------------------------------------
@@ -43,11 +47,17 @@ BATCH_SIZE = 25
 # ----------------------------------------------------------------------------
 def _load_cache() -> dict:
     if not CACHE_PATH.exists():
-        return {"tickers": {}, "taxonomy_hash": ""}
+        return {"tickers": {}, "taxonomy_hash": "", "prompt_version": PROMPT_VERSION}
     try:
-        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
     except Exception:
-        return {"tickers": {}, "taxonomy_hash": ""}
+        return {"tickers": {}, "taxonomy_hash": "", "prompt_version": PROMPT_VERSION}
+    # Invalidate stale-prompt-version caches so every ticker re-runs
+    # through the current prompt format.
+    if data.get("prompt_version") != PROMPT_VERSION:
+        return {"tickers": {}, "taxonomy_hash": data.get("taxonomy_hash", ""),
+                "prompt_version": PROMPT_VERSION}
+    return data
 
 
 def _save_cache(data: dict) -> None:
@@ -265,7 +275,8 @@ def classify_batch(
     data = _load_cache()
     tax_h = _taxonomy_hash(taxonomy)
     if data.get("taxonomy_hash") != tax_h:
-        data = {"tickers": {}, "taxonomy_hash": tax_h}
+        data = {"tickers": {}, "taxonomy_hash": tax_h,
+                "prompt_version": PROMPT_VERSION}
 
     cache = data.setdefault("tickers", {})
     to_run = [c for c in companies if c.get("ticker", "").upper() not in cache]
@@ -300,6 +311,7 @@ def classify_batch(
 
         done += len(chunk)
         data["taxonomy_hash"] = tax_h
+        data["prompt_version"] = PROMPT_VERSION
         _save_cache(data)
         if progress_cb:
             progress_cb(done, total, "ok")
