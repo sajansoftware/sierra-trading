@@ -39,7 +39,7 @@ BATCH_SIZE = 25
 # Bump when the prompt format changes — any cache built under a
 # different version is wiped on load so every ticker re-runs through
 # the current prompt.
-PROMPT_VERSION = "v2-validation"
+PROMPT_VERSION = "v3-validation-with-prev"
 
 
 # ----------------------------------------------------------------------------
@@ -286,6 +286,9 @@ def classify_batch(
 
     for i in range(0, total, BATCH_SIZE):
         chunk = to_run[i:i + BATCH_SIZE]
+        # Index by ticker so we can carry the prior rule-based pick
+        # onto the cache record as prev_sector / prev_sub_sector.
+        by_tkr = {c.get("ticker", "").upper(): c for c in chunk}
         try:
             prompt = _build_prompt(chunk, taxonomy, taxonomy_labels)
             raw = _call_gemini(prompt)
@@ -301,10 +304,13 @@ def classify_batch(
             if not valid:
                 continue
             tkr = valid["ticker"]
+            cur = by_tkr.get(tkr) or {}
             is_correct = bool(rec.get("is_correct"))
             cache[tkr] = {
                 **{k: v for k, v in valid.items() if k != "ticker"},
-                "is_correct": is_correct,
+                "is_correct":      is_correct,
+                "prev_sector":     cur.get("current_sector"),
+                "prev_sub_sector": cur.get("current_sub_sector"),
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             out[tkr] = cache[tkr]
@@ -317,6 +323,42 @@ def classify_batch(
             progress_cb(done, total, "ok")
         time.sleep(0.4)
 
+    return out
+
+
+def list_overturns(limit: int | None = None) -> list[dict]:
+    """Return cache entries where Gemini overturned the rule-based pick.
+
+    Each item: {ticker, prev_sector, prev_sub_sector, sector,
+    sub_sector, rationale, ts}. Sorted newest first.
+    """
+    data = _load_cache()
+    tickers = data.get("tickers") or {}
+    out: list[dict] = []
+    for sym, rec in tickers.items():
+        if rec.get("is_correct"):
+            continue
+        prev_sec = rec.get("prev_sector")
+        prev_sub = rec.get("prev_sub_sector")
+        if not prev_sec or not prev_sub:
+            continue
+        new_sec = rec.get("sector")
+        new_sub = rec.get("sub_sector")
+        # Don't show identity flips (defensive — shouldn't happen)
+        if prev_sec == new_sec and prev_sub == new_sub:
+            continue
+        out.append({
+            "ticker":          sym,
+            "prev_sector":     prev_sec,
+            "prev_sub_sector": prev_sub,
+            "sector":          new_sec,
+            "sub_sector":      new_sub,
+            "rationale":       rec.get("rationale", ""),
+            "ts":              rec.get("ts", ""),
+        })
+    out.sort(key=lambda r: r["ts"], reverse=True)
+    if limit is not None:
+        out = out[:limit]
     return out
 
 

@@ -49,7 +49,6 @@ import healthcare_universe
 import utilities_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
-from aidan import audit_rows, QASuggestion
 import mia as mia_module
 import tradervue
 
@@ -1096,145 +1095,146 @@ def render_top_movers() -> None:
 
 
 # =============================================================================
-# Operations — catalyst-classifier QA agent
+# Operations — Aidan (currently houses the Categorization audit log)
 # =============================================================================
+def _human_sub(sec: str, sub_key: str) -> str:
+    try:
+        return SECTORS[sec][sub_key][0]
+    except Exception:
+        return (sub_key or "").replace("_", " ")
+
+
 def render_operations() -> None:
     st.markdown(
         f"""<div style="margin-bottom:8px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Operations</span>
+            text-transform:uppercase;letter-spacing:1px;">Aidan / Operations</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">Classifier QA Audit</div>
-        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Operations scans every passing ticker's catalyst headlines, finds
-          rows still labeled 'Press Release' that contain biotech /
-          corporate signal words, and proposes the catalyst type plus the
-          keyword to add to the classifier.</div>""",
+          letter-spacing:-0.5px;margin-bottom:18px;">Operations</div>""",
         unsafe_allow_html=True,
     )
 
-    # Pool of tickers = every passing ticker across all sectors
-    pool: set[str] = set()
-    for mod in (bio_universe, tech_universe, energy_universe,
-                industrials_universe, materials_universe,
-                consumer_disc_universe, financials_universe,
-                comm_services_universe, consumer_staples_universe,
-                real_estate_universe, healthcare_svc_universe):
-        try:
-            pool.update(mod.all_tickers())
-        except Exception:
-            continue
-    pool = sorted(pool)
+    # Sub-button row — currently one tab; structured so more can be
+    # added later (Risk audit, Journal recon, etc.).
+    if "op_view" not in st.session_state:
+        st.session_state.op_view = "categorization"
+    sb1, _ = st.columns([2, 10])
+    with sb1:
+        if st.button(
+            "Categorization",
+            key="op_categorization_btn",
+            type="primary" if st.session_state.op_view == "categorization" else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.op_view = "categorization"
+            st.rerun()
 
-    max_tickers = st.slider(
-        "Tickers to scan (caps the audit so it finishes in reasonable time)",
-        min_value=20, max_value=300, value=80, step=20,
-    )
-    pool = pool[:max_tickers]
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-    suggestions: list[QASuggestion] = []
-    n_no_news = 0
-    n_rows = 0
-    with st.spinner(f"Operations auditing {len(pool)} tickers…"):
-        for tkr in pool:
-            try:
-                rows = fetch_premarket_catalysts(tkr)
-            except Exception:
-                continue
-            n_rows += len(rows)
-            n_no_news += sum(1 for r in rows if r.get("type") in ("No news", "Press Release"))
-            suggestions.extend(audit_rows(rows, tkr))
+    if st.session_state.op_view == "categorization":
+        _render_categorization_log()
 
-    # Summary
-    cov_pct = 100 * (1 - n_no_news / n_rows) if n_rows else 0
-    st.markdown(
-        f"""<div style="display:flex;gap:24px;margin-bottom:18px;">
-          <span style="color:{WHITE};font-weight:600;">Tickers scanned: {len(pool)}</span>
-          <span style="color:{WHITE_DIM};">Catalyst rows: {n_rows}</span>
-          <span style="color:{WHITE_DIM};">Unclassified rows: {n_no_news}</span>
-          <span style="color:{GOOD};">Classifier coverage: {cov_pct:.1f}%</span>
-          <span style="color:{WARN};">Operations suggestions: {len(suggestions)}</span>
-        </div>""",
-        unsafe_allow_html=True,
-    )
 
-    if not suggestions:
-        st.info(
-            "No misclassified rows found in the scanned tickers. Bump the "
-            "ticker count slider to audit more of the universe."
-        )
+def _render_categorization_log() -> None:
+    """Changelog-style view of every Gemini-driven re-categorization."""
+    try:
+        from gemini_classifier import list_overturns, stats as gem_stats
+    except Exception:
+        st.error("Gemini classifier module unavailable.")
         return
 
-    # Group suggestions by proposed type
-    by_type: dict[str, list[QASuggestion]] = {}
-    for s in suggestions:
-        by_type.setdefault(s.suggested_type, []).append(s)
+    overturns = list_overturns()
+    s = gem_stats()
 
-    for stype in sorted(by_type.keys(), key=lambda k: -len(by_type[k])):
-        items = by_type[stype]
-        type_col = CATALYST_TYPE_COLOR.get(stype, WHITE_MUTE)
-        st.markdown(
-            f"""<div style="margin:18px 0 8px;display:flex;
-              align-items:center;gap:10px;">
-              <span style="background:{type_col};color:#06121e;
-                font-weight:700;font-size:0.78rem;padding:3px 10px;
-                border-radius:4px;">{stype}</span>
-              <span style="color:{WHITE_MUTE};font-size:0.8rem;">
-                {len(items)} headline(s) Operations would reclassify here</span>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-        head_cells = "".join(
-            f"<th style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-            f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
-            f"text-align:{align};'>{h}</th>"
-            for h, align in [
-                ("Ticker","left"), ("Date","left"), ("Headline","left"),
-                ("Matched phrase","left"), ("Source","center"),
-            ]
-        )
-        body_rows = []
-        for s in items[:30]:    # cap per group for readability
-            body_rows.append(
-                f"<tr>"
-                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
-                f"color:{WHITE};font-weight:600;'>{s.ticker}</td>"
-                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
-                f"color:{WHITE_DIM};font-size:0.82rem;white-space:nowrap;'>{s.date}</td>"
-                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
-                f"color:{WHITE_DIM};font-size:0.82rem;max-width:520px;'>{s.headline}</td>"
-                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
-                f"color:{ACCENT};font-size:0.78rem;font-style:italic;'>"
-                f"\"{s.matched_phrase}\"</td>"
-                f"<td style='padding:7px 12px;border-bottom:1px solid {BORDER};"
-                f"color:{WHITE_MUTE};font-size:0.78rem;text-align:center;'>"
-                f"{s.source}</td>"
-                f"</tr>"
+    st.markdown(
+        f"""<div style="font-size:0.85rem;color:{WHITE_DIM};
+          margin-bottom:14px;max-width:760px;">
+          Every row below is a ticker whose original keyword-rule sector
+          was overturned by Gemini after the validation question
+          (<em>Is X a Y company?</em>). Sorted newest first.
+        </div>
+        <div style="display:flex;gap:24px;margin-bottom:18px;">
+          <span style="color:{WHITE};font-weight:600;">
+            Re-categorizations: {len(overturns)}</span>
+          <span style="color:{WHITE_DIM};">
+            Total classified: {s.get('total_classified', 0):,}</span>
+          <span style="color:{WHITE_DIM};">
+            API configured: {'yes' if s.get('configured') else 'no'}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if not overturns:
+        if not s.get("configured"):
+            st.warning(
+                "GEMINI_API_KEY is not set. Add it to "
+                "`.streamlit/secrets.toml` to enable AI re-categorization. "
+                "The background worker is idle without it."
             )
-        st.markdown(
-            f"""<table class='sierra-table'>
-              <thead><tr>{head_cells}</tr></thead>
-              <tbody>{''.join(body_rows)}</tbody>
-            </table>""",
-            unsafe_allow_html=True,
+        else:
+            st.info(
+                "No re-categorizations recorded yet. The background "
+                "Gemini worker is still processing the universe — check "
+                "the AI cache footer in the sidebar for progress."
+            )
+        return
+
+    head_cells = "".join(
+        f"<th style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Timestamp", "left"),
+            ("Ticker",    "left"),
+            ("Previous",  "left"),
+            ("→",         "center"),
+            ("New",       "left"),
+            ("Rationale", "left"),
+        ]
+    )
+
+    rows = []
+    for r in overturns:
+        prev_sec = r["prev_sector"]
+        prev_lbl = _human_sub(prev_sec, r["prev_sub_sector"])
+        new_sec = r["sector"]
+        new_lbl = _human_sub(new_sec, r["sub_sector"])
+        rows.append(
+            f"<tr>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_MUTE};font-size:0.72rem;white-space:nowrap;"
+            f"vertical-align:top;'>{r['ts']}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};font-weight:700;vertical-align:top;'>"
+            f"{r['ticker']}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>"
+            f"<div style='color:{DANGER};font-size:0.8rem;font-weight:600;"
+            f"line-height:1.25;'>{prev_sec}</div>"
+            f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
+            f"line-height:1.25;'>{prev_lbl}</div></td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{ACCENT};font-weight:700;text-align:center;"
+            f"vertical-align:top;font-size:0.9rem;'>→</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>"
+            f"<div style='color:{GOOD};font-size:0.8rem;font-weight:600;"
+            f"line-height:1.25;'>{new_sec}</div>"
+            f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
+            f"line-height:1.25;'>{new_lbl}</div></td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.78rem;font-style:italic;"
+            f"max-width:360px;vertical-align:top;'>"
+            f"{r.get('rationale','') or '—'}</td>"
+            f"</tr>"
         )
 
     st.markdown(
-        f"""<div style="margin-top:24px;padding:14px 18px;
-          background:{NAVY_CARD};border:1px solid {BORDER};
-          border-radius:6px;">
-          <div style="color:{WHITE};font-weight:600;margin-bottom:6px;">
-            How to apply Operations' suggestions</div>
-          <div style="color:{WHITE_DIM};font-size:0.85rem;line-height:1.5;">
-            Open <code style="color:{ACCENT};">_dashboard/data.py</code>,
-            find the <code style="color:{ACCENT};">CATALYST_KEYWORDS</code>
-            list, and append each <em>matched phrase</em> above to its
-            suggested type. Restart the dashboard - the previously
-            unclassified rows reclassify on the next catalyst-dialog open.
-          </div>
-        </div>""",
+        f"<table class='sierra-table'>"
+        f"<thead><tr>{head_cells}</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>",
         unsafe_allow_html=True,
     )
 
