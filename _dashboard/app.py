@@ -1149,10 +1149,12 @@ def _render_categorization_log() -> None:
 
     st.markdown(
         f"""<div style="font-size:0.85rem;color:{WHITE_DIM};
-          margin-bottom:14px;max-width:760px;">
-          Every row below is a ticker whose original keyword-rule sector
-          was overturned by Gemini after the validation question
-          (<em>Is X a Y company?</em>). Sorted newest first.
+          margin-bottom:14px;max-width:760px;line-height:1.55;">
+          <b>Aidan's role:</b> scan every ticker, ask Gemini
+          <em>"Is [company] stock a [sub-sector] company that falls
+          under [sector]? If not, which sector and sub-sector does
+          this company fall under?"</em>, update the classification on
+          disk, and log every overturn below. Sorted newest first.
         </div>
         <div style="display:flex;gap:24px;margin-bottom:18px;">
           <span style="color:{WHITE};font-weight:600;">
@@ -1578,9 +1580,23 @@ def render_ipo_calendar() -> None:
 
 
 # =============================================================================
-# Background Gemini classifier — runs silently on first dashboard load
-# of each process, filling the disk cache so sector pages re-bucket
-# automatically. No UI; no user action required.
+# Aidan (Operations) — background sector / sub-sector classifier
+# =============================================================================
+# Aidan's four-step workflow, running silently on every dashboard
+# process start:
+#
+#   1. Scan through each ticker in the $1-$20 NASDAQ universe.
+#   2. For each one, ask Gemini:
+#         "Is [company] stock a [sub-sector] company that falls under
+#          [sector]? If not, which sector and sub-sector does this
+#          company fall under?"
+#   3. Update the ticker's classification on disk so every sector page
+#      and the Top Moves table reflect Gemini's pick on next render.
+#   4. Record any overturn (timestamp, ticker, previous → new) in the
+#      Categorization log under Aidan (Operations).
+#
+# No UI; no user action required. The sidebar AI-cache footer shows
+# how many tickers Aidan has processed so far.
 # =============================================================================
 import threading as _threading
 _BG_LOCK = _threading.Lock()
@@ -1607,6 +1623,8 @@ def _kickoff_background_classifier() -> None:
             from screener import (
                 fetch_nasdaq_universe, _parse_price, keyword_classify,
             )
+
+            # ----- Step 1: scan through each ticker in the universe ---
             raw = fetch_nasdaq_universe()
             todo: list[dict] = []
             for r in raw:
@@ -1618,7 +1636,7 @@ def _kickoff_background_classifier() -> None:
                     continue
                 if cached_classification(sym) is not None:
                     continue
-                # Compute the current rule-based assignment so the
+                # Snapshot the current keyword-rule pick so the
                 # prompt can ask Gemini to validate or override it.
                 cur = keyword_classify(r) or (None, None)
                 todo.append({
@@ -1631,12 +1649,19 @@ def _kickoff_background_classifier() -> None:
                 })
             if not todo:
                 return
+
             taxonomy = {sec: list(branches.keys()) for sec, branches in SECTORS.items()}
-            # Human labels per sub-sector key — the prompt uses these so
+            # Human labels per sub-sector key — used in the prompt so
             # Gemini sees "Publishing & News" instead of "Publishing_News".
             taxonomy_labels: dict[str, dict[str, str]] = {}
             for sec, branches in SECTORS.items():
                 taxonomy_labels[sec] = {k: v[0] for k, v in branches.items()}
+
+            # ----- Steps 2-4: ask, update, record (handled by
+            #       classify_batch — it issues the validation question,
+            #       writes Gemini's pick to disk, and tags overturns
+            #       with prev_sector / prev_sub_sector for the
+            #       Categorization log). ----------------------------
             classify_batch(todo, taxonomy, taxonomy_labels=taxonomy_labels)
         except Exception as e:
             import sys

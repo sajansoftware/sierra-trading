@@ -1,26 +1,45 @@
-"""Google Gemini classifier for sector / sub-sector assignment.
+"""Aidan — Sector / Sub-Sector Classifier (powered by Gemini).
 
-Replaces the keyword-rule classifier with an LLM call that understands
-company business descriptions. Results are persisted to disk so the
-expensive API call only fires once per ticker — every subsequent
-dashboard load reads from cache.
+Aidan owns the sector / sub-sector categorization workflow in
+Operations. His job runs in four steps on every dashboard load:
+
+  1. Scan through each ticker in the $1-$20 NASDAQ universe.
+  2. For each one, ask Gemini:
+        "Is [company name] stock a [sub-sector] company that falls
+         under [sector]? If not, which sector and sub-sector does
+         this company fall under?"
+     This anchors the LLM to the current keyword-rule pick instead
+     of free-form picking from scratch.
+  3. Update the ticker's classification on disk (Gemini's pick wins
+     over the keyword rules from this point forward).
+  4. If Gemini overturned the pick, the change is recorded in the
+     Categorization log under Aidan (Operations) with timestamp,
+     ticker, previous sector / sub-sector, new sector / sub-sector,
+     and a one-clause rationale.
+
+Results are persisted to disk so the API call only fires once per
+ticker — every subsequent dashboard load reads from cache.
 
 Environment:
-  GEMINI_API_KEY — your Google AI Studio key. If unset, classify_*
-  functions return None and callers fall back to the keyword rules.
+  GEMINI_API_KEY — your Google AI Studio key. If unset, Aidan
+  stays idle and the dashboard uses the keyword rule fallback.
 
 Cache file: .gemini_classify_cache.json next to this module. Schema:
   {
     "tickers": {
       "ABC": {
-        "sector": "Health Care",
-        "sub_sector": "Red_Medical_Pharmaceutical",
-        "rationale": "biotech pharma focused on oncology",
-        "ts": "2026-05-22T10:32:00Z"
+        "sector":          "Health Care",
+        "sub_sector":      "Red_Medical_Pharmaceutical",
+        "prev_sector":     "Communication Services",
+        "prev_sub_sector": "Publishing_News",
+        "is_correct":      false,
+        "rationale":       "alcohol-detection wearable medical device",
+        "ts":              "2026-05-22T10:32:00Z"
       },
       ...
     },
-    "taxonomy_hash": "..."   # invalidates cache when SECTORS dict changes
+    "taxonomy_hash": "...",
+    "prompt_version": "..."
   }
 """
 
@@ -39,7 +58,7 @@ BATCH_SIZE = 25
 # Bump when the prompt format changes — any cache built under a
 # different version is wiped on load so every ticker re-runs through
 # the current prompt.
-PROMPT_VERSION = "v3-validation-with-prev"
+PROMPT_VERSION = "v4-aidan-template"
 
 
 # ----------------------------------------------------------------------------
@@ -151,23 +170,25 @@ def _build_prompt(
         cur_sub_key = c.get("current_sub_sector") or "—"
         cur_label = (label_of(cur_sec, cur_sub_key)
                      if cur_sec != "—" else "—")
+        name = c.get("name", "this company")
         co_lines.append(
             f"{i}. TICKER {c.get('ticker','?')}"
-            f" | NAME: {c.get('name','')[:80]}"
+            f" | NAME: {name[:80]}"
             f" | NASDAQ_INDUSTRY: {c.get('industry','')[:80]}\n"
             f"   CURRENT_ASSIGNMENT: {cur_sec} / {cur_label}"
             f"  [sub_sector key: {cur_sub_key}]\n"
-            f"   QUESTION: Is {c.get('name','this company')} a"
-            f" \"{cur_label}\" company under \"{cur_sec}\"?"
-            f" If not, what sector and sub-sector should it fall under?"
+            f"   QUESTION: Is {name} stock a {cur_label} company that"
+            f" falls under {cur_sec}? If not, which sector and"
+            f" sub-sector does this company fall under?"
         )
     co_block = "\n".join(co_lines)
 
-    return f"""You are a securities classification analyst. For each
-company below, validate the CURRENT sub-sector assignment against
-what the company actually does based on its public filings and
-website. If the current assignment is wrong, pick the correct
-(sector, sub_sector) from the taxonomy. Output ONLY valid JSON — no
+    return f"""You are Aidan, the Operations classification analyst
+for a small-cap intraday trading dashboard. Your job is to scan each
+ticker, ask the validation question, and either confirm the current
+sector / sub-sector or pick the correct one from the firm's taxonomy.
+Rely on what the company actually does (public filings + website),
+not the coarse NASDAQ industry label. Output ONLY valid JSON — no
 commentary, no markdown fences.
 
 TAXONOMY (sector_key (human label), …):
@@ -181,8 +202,6 @@ RULES:
   false when you are overriding it.
 - When is_correct is true, sector / sub_sector MUST equal the
   CURRENT_ASSIGNMENT.
-- Rely on actual business activity, not the NASDAQ industry label
-  which is often coarse or wrong.
 - If genuinely uncertain, route to the sector's "Other" sub-sector.
 - "rationale" is one short clause (≤ 14 words) — what the company
   actually does and why this sub-sector fits.
