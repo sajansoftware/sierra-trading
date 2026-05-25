@@ -30,6 +30,7 @@ Cache file: .pm_backtest_cache.json next to this module. Schema:
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -39,6 +40,10 @@ from typing import Any
 CACHE_PATH = Path(__file__).resolve().parent / ".pm_backtest_cache.json"
 MIN_MOVE_PCT = 100.0
 LOOKBACK_DAYS = 180   # 6 months
+
+# Serialize all writers since the worker fans Pass 2 across 12
+# threads — without this the cache file would interleave writes.
+_WRITE_LOCK = threading.Lock()
 
 
 # ----------------------------------------------------------------------------
@@ -78,33 +83,36 @@ def _serialize_move(m: dict) -> dict:
 def record_moves(ticker: str, moves: list[dict]) -> int:
     """Merge a fresh scan into the archive. Deduped by date.
 
+    Always touches `scanned_ts` so an empty result still marks the
+    ticker as scanned (keeps subsequent runs from re-checking it).
     Returns the number of new rows added for this ticker.
     """
     sym = ticker.upper().strip()
     if not sym:
         return 0
-    data = _load()
-    tickers = data.setdefault("tickers", {})
-    existing = tickers.get(sym) or {"moves": [], "scanned_ts": ""}
-    by_date: dict[str, dict] = {
-        (m.get("date") or ""): m for m in (existing.get("moves") or [])
-    }
-    n_new = 0
-    for m in moves:
-        s = _serialize_move(m)
-        d = s.get("date") or ""
-        if not d:
-            continue
-        if (s.get("upside_pct") or 0) < MIN_MOVE_PCT:
-            continue
-        if d not in by_date:
-            n_new += 1
-        by_date[d] = s
-    tickers[sym] = {
-        "moves":      list(by_date.values()),
-        "scanned_ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    _save(data)
+    with _WRITE_LOCK:
+        data = _load()
+        tickers = data.setdefault("tickers", {})
+        existing = tickers.get(sym) or {"moves": [], "scanned_ts": ""}
+        by_date: dict[str, dict] = {
+            (m.get("date") or ""): m for m in (existing.get("moves") or [])
+        }
+        n_new = 0
+        for m in moves:
+            s = _serialize_move(m)
+            d = s.get("date") or ""
+            if not d:
+                continue
+            if (s.get("upside_pct") or 0) < MIN_MOVE_PCT:
+                continue
+            if d not in by_date:
+                n_new += 1
+            by_date[d] = s
+        tickers[sym] = {
+            "moves":      list(by_date.values()),
+            "scanned_ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        _save(data)
     return n_new
 
 

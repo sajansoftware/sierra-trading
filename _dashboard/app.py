@@ -1892,25 +1892,26 @@ def _kickoff_backtest_archive_worker() -> None:
         _BACKTEST_BG_STARTED = True
 
     def _worker() -> None:
-        """Scan every NASDAQ / NYSE / AMEX ticker for historical
-        ≥50% PM moves — not just the live $1–$20 screen.
+        """Scan every valid US-listed ticker for historical ≥100% PM
+        moves. No per-run cap — the worker churns through the entire
+        universe in one process lifetime.
 
-        Two-pass design so we don't burn yfinance bandwidth on
-        names that obviously never moved:
+          Pass 1 (cheap, batched) — pull 6mo daily bars in chunks
+          of 80 tickers. Daily range ≥ 100% (high/low ≥ 2.0) is a
+          necessary precondition for a PM-window move ≥ 100%.
 
-          Pass 1 (cheap) — batch-download 6mo daily bars in chunks
-          of 80 tickers. Daily range ≥ 50% means a PM ≥ 50% move
-          is at least possible that day. Tickers whose entire 6mo
-          history has zero such days are skipped.
+          Pass 2 (expensive, parallelized) — for each survivor,
+          fetch 5-minute intraday bars via fetch_premarket_catalysts
+          and record any PM-window moves ≥ MIN_MOVE_PCT. Runs across
+          12 worker threads so wall time scales reasonably.
 
-          Pass 2 (expensive) — for each surviving ticker, fetch
-          5-minute intraday bars via fetch_premarket_catalysts and
-          record any precise PM-window moves ≥ MIN_MOVE_PCT.
-
-        Per-run candidate cap keeps a single process lifetime
-        bounded; subsequent runs resume via is_stale gating.
+        Every ticker that's actually scanned gets a scanned_ts on
+        disk — even when no moves match — so subsequent process
+        restarts skip it via is_stale gating.
         """
         try:
+            import sys
+            from concurrent.futures import ThreadPoolExecutor
             import yfinance as yf
             from data import fetch_premarket_catalysts
             from screener import fetch_nasdaq_universe
@@ -1918,11 +1919,15 @@ def _kickoff_backtest_archive_worker() -> None:
                 record_moves, is_stale, MIN_MOVE_PCT,
             )
 
-            CANDIDATES_PER_RUN = 800   # daily-bar pre-filter is cheap
-            DAILY_BATCH = 80
+            DAILY_BATCH    = 80
+            PASS2_WORKERS  = 12
+            STALE_HOURS    = 24
             # At MIN_MOVE_PCT=100 this becomes high/low ≥ 2.0 — a day
             # where the stock at minimum doubled top-to-bottom.
             BIG_DAY_RATIO = 1.0 + (MIN_MOVE_PCT / 100.0)
+
+            def _log(msg: str) -> None:
+                print(f"[backtest-bg] {msg}", file=sys.stderr, flush=True)
 
             # ----- Collect candidate symbols (every valid US ticker) -
             raw = fetch_nasdaq_universe()
@@ -1931,15 +1936,17 @@ def _kickoff_backtest_archive_worker() -> None:
                 sym = (r.get("symbol") or "").strip().upper()
                 if not sym or any(c in sym for c in ".^$/"):
                     continue
-                if not is_stale(sym, max_age_hours=24):
+                if not is_stale(sym, max_age_hours=STALE_HOURS):
                     continue
                 candidates.append(sym)
-            candidates = candidates[:CANDIDATES_PER_RUN]
             if not candidates:
+                _log("all tickers fresh — nothing to do this run.")
                 return
+            _log(f"starting scan: {len(candidates)} candidate tickers")
 
             # ----- Pass 1: daily-bar pre-filter (batched, fast) ------
             survivors: list[str] = []
+            n_chunks = (len(candidates) + DAILY_BATCH - 1) // DAILY_BATCH
             for i in range(0, len(candidates), DAILY_BATCH):
                 chunk = candidates[i:i + DAILY_BATCH]
                 try:
@@ -1948,29 +1955,38 @@ def _kickoff_backtest_archive_worker() -> None:
                         progress=False, group_by="ticker",
                         auto_adjust=True, threads=True,
                     )
-                except Exception:
+                except Exception as e:
+                    _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks} dl failed: {e}")
                     continue
+                chunk_survivors = 0
                 for sym in chunk:
                     try:
                         ohlc = df[sym] if len(chunk) > 1 else df
                         if ohlc is None or ohlc.empty:
                             continue
-                        # high/low ratio ≥ 1.5 on any day means daily
-                        # range ≥ 50% — necessary (not sufficient) for
-                        # a PM-window move ≥ 50%.
+                        # daily range = high/low; ≥2.0 means the day
+                        # doubled top-to-bottom (necessary for a PM
+                        # ≥100% move but not sufficient).
                         ratio = (ohlc["High"] / ohlc["Low"]).dropna()
                         if (ratio >= BIG_DAY_RATIO).any():
                             survivors.append(sym)
+                            chunk_survivors += 1
                     except Exception:
                         continue
+                _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks}: "
+                     f"+{chunk_survivors} survivors "
+                     f"(total {len(survivors)})")
 
-            # ----- Pass 2: precise PM-window scan for survivors ------
-            for sym in survivors:
+            if not survivors:
+                _log("no survivors from pass1.")
+                return
+
+            _log(f"pass2 starting on {len(survivors)} survivors "
+                 f"with {PASS2_WORKERS} workers")
+
+            # ----- Pass 2: precise PM-window scan, parallelized ------
+            def _deep_scan(sym: str) -> tuple[str, int]:
                 try:
-                    # Wide price bounds so historical moves at any
-                    # price level are recorded (the dashboard's
-                    # $1-$20 screen is for the LIVE view, not the
-                    # historical archive).
                     moves = fetch_premarket_catalysts(
                         sym,
                         min_price=0.01,
@@ -1978,13 +1994,31 @@ def _kickoff_backtest_archive_worker() -> None:
                         min_upside_pct=MIN_MOVE_PCT,
                         lookback_days=60,
                     )
-                    if moves:
-                        record_moves(sym, moves)
                 except Exception:
-                    pass
+                    moves = []
+                # Always touch the archive (even for empty results)
+                # so is_stale skips this ticker on next run.
+                try:
+                    n = record_moves(sym, moves or [])
+                except Exception:
+                    n = 0
+                return sym, n
+
+            done = 0
+            with_moves = 0
+            with ThreadPoolExecutor(max_workers=PASS2_WORKERS) as pool:
+                for sym, n in pool.map(_deep_scan, survivors):
+                    done += 1
+                    if n > 0:
+                        with_moves += 1
+                    if done % 25 == 0:
+                        _log(f"pass2 progress: {done}/{len(survivors)} "
+                             f"({with_moves} tickers with ≥100% moves)")
+            _log(f"pass2 finished: {done}/{len(survivors)} done, "
+                 f"{with_moves} tickers contributed moves")
         except Exception as e:
             import sys
-            print(f"[backtest-bg] failed: {e}", file=sys.stderr)
+            print(f"[backtest-bg] failed: {e}", file=sys.stderr, flush=True)
 
     t = _threading.Thread(target=_worker, daemon=True, name="backtest-bg")
     t.start()
