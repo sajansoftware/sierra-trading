@@ -1569,9 +1569,10 @@ def render_backtesting() -> None:
         except Exception:
             return (sub_key or "").replace("_", " ")
 
-    p1_total = s.get("pass1_total", 0)
-    p1_done = s.get("pass1_processed", 0)
-    p1_pct = (p1_done / p1_total * 100) if p1_total else 0
+    universe = s.get("universe_size", 0)
+    to_scan = s.get("to_scan", 0) or universe
+    done = s.get("processed", 0)
+    pct = (done / to_scan * 100) if to_scan else 0
     in_prog = s.get("in_progress")
     status_color = ACCENT if in_prog else GOOD
     status_label = "RUNNING" if in_prog else "IDLE"
@@ -1587,15 +1588,15 @@ def render_backtesting() -> None:
           <span style="color:{WHITE_DIM};">
             Tickers with ≥100% moves: {s.get('tickers_with_moves', 0):,}</span>
           <span style="color:{WHITE_DIM};">
+            Reviewed: {s.get('reviewed_moves', 0):,}</span>
+          <span style="color:{WHITE_DIM};">
             Coverage: {s.get('earliest_date') or '—'} → {s.get('latest_date') or '—'}</span>
         </div>
         <div style="display:flex;gap:24px;margin-bottom:18px;
           flex-wrap:wrap;font-size:0.78rem;color:{WHITE_MUTE};">
-          <span>Universe processed: {p1_done:,} / {p1_total:,}
-            ({p1_pct:.0f}%)</span>
-          <span>Pass 1 survivors (had a 2× daily range day):
-            {s.get('pass1_survivors', 0):,}</span>
-          <span>Pass 2 deep-scanned: {s.get('tickers_deep_scanned', 0):,}</span>
+          <span>Universe scanned this run: {done:,} / {to_scan:,}
+            ({pct:.0f}%)</span>
+          <span>Total tickers in database: {universe:,}</span>
           <span>Last run: {s.get('last_run_ts') or '—'}</span>
         </div>""",
         unsafe_allow_html=True,
@@ -1605,7 +1606,7 @@ def render_backtesting() -> None:
         if in_prog:
             st.info(
                 f"Backtest archive is being built right now — "
-                f"{p1_done:,} of {p1_total:,} tickers checked so far. "
+                f"{done:,} of {to_scan:,} tickers checked so far. "
                 "Refresh in a few minutes; rows appear as the worker "
                 "finds them."
             )
@@ -1618,132 +1619,86 @@ def render_backtesting() -> None:
             )
         return
 
-    head_cells = "".join(
-        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Date",      "left"),
-            ("Ticker",    "left"),
-            ("Sector",    "left"),
-            ("PM Low",    "right"),
-            ("PM High",   "right"),
-            ("PM Move",   "right"),
-            ("Type",      "left"),
-            ("Catalyst",  "left"),
-            ("Source",    "center"),
-        ]
-    )
+    # Build the interactive table via st.data_editor — the Reviewed
+    # column is a real checkbox column whose state persists to disk.
+    import pandas as pd
+    from backtest_archive import mark_reviewed
 
-    body_rows = []
+    rows = []
     for r in moves:
         sym = r.get("ticker", "")
-        date_str = r.get("date", "")
-        pm_low = r.get("pm_low")
-        pm_high = r.get("pm_high")
-        pm_low_time = r.get("pm_low_time") or ""
-        pm_high_time = r.get("pm_high_time") or ""
-        upside = float(r.get("upside_pct") or 0)
-        # Re-tiered for the 100%+ floor: bright green ≥300, green ≥200,
-        # yellow ≥150, accent at the 100-149 base tier.
-        if upside >= 300:
-            move_color = "#22c55e"
-        elif upside >= 200:
-            move_color = GOOD
-        elif upside >= 150:
-            move_color = WARN
-        else:
-            move_color = ACCENT
-
-        ticker_html = (
-            f"<a href='?ticker={sym}' target='_self' "
-            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
-            f"border-bottom:1px dotted {ACCENT};'>{sym}</a>"
-        )
-
         cls = sector_lookup.get(sym)
         if cls:
             sec, sub = cls
             sub_label = _human_sub_label(sec, sub)
-            sector_html = (
-                f"<div style='color:{WHITE};font-size:0.8rem;"
-                f"font-weight:600;line-height:1.25;'>{sec}</div>"
-                f"<div style='color:{WHITE_MUTE};font-size:0.68rem;"
-                f"line-height:1.25;'>{sub_label}</div>"
-            )
         else:
-            sector_html = f"<span style='color:#64748b;'>—</span>"
+            sec, sub_label = "—", "—"
 
-        pm_low_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
-            f"${pm_low:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_low_time}</div>"
-               if pm_low_time else "")
-        ) if pm_low else f"<span style='color:#64748b;'>—</span>"
+        pm_low = r.get("pm_low")
+        pm_high = r.get("pm_high")
+        upside = float(r.get("upside_pct") or 0)
+        rows.append({
+            "Reviewed":     bool(r.get("reviewed", False)),
+            "Date":         r.get("date", ""),
+            "Ticker":       sym,
+            "Sector":       sec,
+            "Sub-Sector":   sub_label,
+            "PM Low":       float(pm_low) if pm_low else None,
+            "PM Low Time":  r.get("pm_low_time", "") or "",
+            "PM High":      float(pm_high) if pm_high else None,
+            "PM High Time": r.get("pm_high_time", "") or "",
+            "PM Move %":    upside,
+            "Type":         r.get("type") or "—",
+            "Catalyst":     r.get("title", "") or "",
+            "Source":       (
+                r.get("link") if r.get("link") else r.get("source", "—")
+            ),
+        })
 
-        pm_high_cell = (
-            f"<div style='color:{WHITE};font-weight:600;'>${pm_high:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_high_time}</div>"
-               if pm_high_time else "")
-        ) if pm_high else f"<span style='color:#64748b;'>—</span>"
-
-        type_label = r.get("type") or "—"
-        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.68rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
-        )
-
-        title = r.get("title") or ""
-        catalyst_text = title if title else f"<span style='color:#64748b;'>—</span>"
-
-        src = r.get("source") or "—"
-        link = r.get("link") or ""
-        if link and src != "—":
-            source_html = (
-                f"<a href='{link}' target='_blank' "
-                f"style='color:{ACCENT};text-decoration:none;"
-                f"font-size:0.76rem;white-space:nowrap;'>{src} ↗</a>"
-            )
-        else:
-            source_html = (
-                f"<span style='color:#64748b;font-size:0.76rem;'>{src}</span>"
-            )
-
-        body_rows.append(
-            f"<tr>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};font-weight:500;white-space:nowrap;"
-            f"vertical-align:top;'>{date_str}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{ticker_html}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{sector_html}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{move_color};text-align:right;font-weight:700;"
-            f"vertical-align:top;'>+{upside:.1f}%</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.82rem;max-width:340px;"
-            f"vertical-align:top;'>{catalyst_text}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;vertical-align:top;'>{source_html}</td>"
-            f"</tr>"
-        )
-
-    st.markdown(
-        f"<table class='sierra-table'>"
-        f"<thead><tr>{head_cells}</tr></thead>"
-        f"<tbody>{''.join(body_rows)}</tbody></table>",
-        unsafe_allow_html=True,
+    df = pd.DataFrame(rows)
+    edited = st.data_editor(
+        df,
+        column_config={
+            "Reviewed": st.column_config.CheckboxColumn(
+                "✓",
+                help="Tick once you've reviewed this move",
+                width="small",
+                default=False,
+            ),
+            "Date":         st.column_config.TextColumn("Date", width="small"),
+            "Ticker":       st.column_config.TextColumn("Ticker", width="small"),
+            "Sector":       st.column_config.TextColumn("Sector", width="medium"),
+            "Sub-Sector":   st.column_config.TextColumn("Sub-Sector", width="medium"),
+            "PM Low":       st.column_config.NumberColumn(
+                "PM Low", format="$%.2f", width="small"),
+            "PM Low Time":  st.column_config.TextColumn("PM Low Time", width="small"),
+            "PM High":      st.column_config.NumberColumn(
+                "PM High", format="$%.2f", width="small"),
+            "PM High Time": st.column_config.TextColumn("PM High Time", width="small"),
+            "PM Move %":    st.column_config.ProgressColumn(
+                "PM Move %", format="+%.1f%%",
+                min_value=100, max_value=500, width="small"),
+            "Type":         st.column_config.TextColumn("Type", width="small"),
+            "Catalyst":     st.column_config.TextColumn("Catalyst", width="large"),
+            "Source":       st.column_config.LinkColumn(
+                "Source", width="small", display_text="open ↗"),
+        },
+        disabled=[c for c in df.columns if c != "Reviewed"],
+        hide_index=True,
+        use_container_width=True,
+        height=min(700, 60 + 35 * len(rows)),
+        key="backtest_data_editor",
     )
+
+    # Persist any toggled Reviewed checkboxes back to disk.
+    edited_records = edited.to_dict("records")
+    for orig_move, new_row in zip(moves, edited_records):
+        orig_r = bool(orig_move.get("reviewed", False))
+        new_r = bool(new_row.get("Reviewed", False))
+        if orig_r != new_r:
+            mark_reviewed(
+                orig_move["ticker"], orig_move.get("date", ""), new_r
+            )
 
 
 def render_ipo_calendar() -> None:
@@ -1919,39 +1874,34 @@ def _kickoff_backtest_archive_worker() -> None:
         _BACKTEST_BG_STARTED = True
 
     def _worker() -> None:
-        """Scan every valid US-listed ticker for historical ≥100% PM
-        moves. No per-run cap — the worker churns through the entire
-        universe in one process lifetime.
+        """Scan every valid US-listed ticker for ≥100% PM moves.
 
-          Pass 1 (cheap, batched) — pull 6mo daily bars in chunks
-          of 80 tickers. Daily range ≥ 100% (high/low ≥ 2.0) is a
-          necessary precondition for a PM-window move ≥ 100%.
+        Previously this had a 'Pass 1' daily-bar pre-filter that
+        rejected tickers whose daily High/Low never crossed 2× in
+        6 months. That was WRONG — yfinance daily bars exclude
+        pre-market data, so any ticker whose 100% move happened
+        *only* in the 4-9:29 AM window got incorrectly rejected.
 
-          Pass 2 (expensive, parallelized) — for each survivor,
-          fetch 5-minute intraday bars via fetch_premarket_catalysts
-          and record any PM-window moves ≥ MIN_MOVE_PCT. Runs across
-          12 worker threads so wall time scales reasonably.
+        Fix: run the precise 5-minute PM-window scan
+        (fetch_premarket_catalysts) on every candidate, parallelized
+        across 16 worker threads. Slower than the broken pre-filter
+        but catches the real cases.
 
-        Every ticker that's actually scanned gets a scanned_ts on
-        disk — even when no moves match — so subsequent process
-        restarts skip it via is_stale gating.
+        Every scanned ticker gets a scanned_ts on disk even when no
+        moves match, so subsequent restarts skip via is_stale gating.
         """
         try:
             import sys
+            import time as _time
             from concurrent.futures import ThreadPoolExecutor
-            import yfinance as yf
             from data import fetch_premarket_catalysts
             from screener import fetch_nasdaq_universe
             from backtest_archive import (
                 record_moves, is_stale, update_meta, MIN_MOVE_PCT,
             )
 
-            DAILY_BATCH    = 80
-            PASS2_WORKERS  = 12
-            STALE_HOURS    = 24
-            # At MIN_MOVE_PCT=100 this becomes high/low ≥ 2.0 — a day
-            # where the stock at minimum doubled top-to-bottom.
-            BIG_DAY_RATIO = 1.0 + (MIN_MOVE_PCT / 100.0)
+            SCAN_WORKERS = 16
+            STALE_HOURS  = 24
 
             def _log(msg: str) -> None:
                 print(f"[backtest-bg] {msg}", file=sys.stderr, flush=True)
@@ -1973,71 +1923,23 @@ def _kickoff_backtest_archive_worker() -> None:
                  f"({len(all_valid) - len(candidates)} already fresh)")
             if not candidates:
                 update_meta(
-                    pass1_total=len(all_valid),
-                    pass1_processed=len(all_valid),
+                    universe_size=len(all_valid),
+                    processed=len(all_valid),
                     in_progress=False,
                 )
                 return
             update_meta(
-                pass1_total=len(candidates),
-                pass1_processed=0,
-                pass1_survivors=0,
+                universe_size=len(all_valid),
+                to_scan=len(candidates),
+                processed=0,
                 in_progress=True,
-                last_run_ts=__import__("time").strftime(
-                    "%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()
+                last_run_ts=_time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", _time.gmtime()
                 ),
             )
 
-            # ----- Pass 1: daily-bar pre-filter (batched, fast) ------
-            survivors: list[str] = []
-            n_chunks = (len(candidates) + DAILY_BATCH - 1) // DAILY_BATCH
-            processed = 0
-            for i in range(0, len(candidates), DAILY_BATCH):
-                chunk = candidates[i:i + DAILY_BATCH]
-                try:
-                    df = yf.download(
-                        chunk, period="6mo", interval="1d",
-                        progress=False, group_by="ticker",
-                        auto_adjust=True, threads=True,
-                    )
-                except Exception as e:
-                    _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks} dl failed: {e}")
-                    processed += len(chunk)
-                    update_meta(pass1_processed=processed,
-                                pass1_survivors=len(survivors))
-                    continue
-                chunk_survivors = 0
-                for sym in chunk:
-                    try:
-                        ohlc = df[sym] if len(chunk) > 1 else df
-                        if ohlc is None or ohlc.empty:
-                            continue
-                        # daily range = high/low; ≥2.0 means the day
-                        # doubled top-to-bottom (necessary for a PM
-                        # ≥100% move but not sufficient).
-                        ratio = (ohlc["High"] / ohlc["Low"]).dropna()
-                        if (ratio >= BIG_DAY_RATIO).any():
-                            survivors.append(sym)
-                            chunk_survivors += 1
-                    except Exception:
-                        continue
-                processed += len(chunk)
-                _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks}: "
-                     f"+{chunk_survivors} survivors "
-                     f"({processed}/{len(candidates)} processed, "
-                     f"{len(survivors)} total survivors)")
-                update_meta(pass1_processed=processed,
-                            pass1_survivors=len(survivors))
-
-            if not survivors:
-                _log("no survivors from pass1.")
-                return
-
-            _log(f"pass2 starting on {len(survivors)} survivors "
-                 f"with {PASS2_WORKERS} workers")
-
-            # ----- Pass 2: precise PM-window scan, parallelized ------
-            def _deep_scan(sym: str) -> tuple[str, int]:
+            # ----- Single pass: precise PM-window scan in parallel ---
+            def _scan_one(sym: str) -> tuple[str, int]:
                 try:
                     moves = fetch_premarket_catalysts(
                         sym,
@@ -2058,17 +1960,21 @@ def _kickoff_backtest_archive_worker() -> None:
 
             done = 0
             with_moves = 0
-            with ThreadPoolExecutor(max_workers=PASS2_WORKERS) as pool:
-                for sym, n in pool.map(_deep_scan, survivors):
+            _log(f"scan starting on {len(candidates)} tickers "
+                 f"with {SCAN_WORKERS} workers")
+            with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as pool:
+                for sym, n in pool.map(_scan_one, candidates):
                     done += 1
                     if n > 0:
                         with_moves += 1
-                    if done % 25 == 0:
-                        _log(f"pass2 progress: {done}/{len(survivors)} "
-                             f"({with_moves} tickers with ≥100% moves)")
-            _log(f"pass2 finished: {done}/{len(survivors)} done, "
+                    if done % 50 == 0 or done == len(candidates):
+                        _log(f"progress: {done}/{len(candidates)} "
+                             f"({with_moves} tickers w/ ≥100% moves)")
+                        update_meta(processed=done, with_moves=with_moves)
+            update_meta(processed=done, with_moves=with_moves,
+                        in_progress=False)
+            _log(f"finished: {done}/{len(candidates)} scanned, "
                  f"{with_moves} tickers contributed moves")
-            update_meta(in_progress=False)
         except Exception as e:
             import sys
             print(f"[backtest-bg] failed: {e}", file=sys.stderr, flush=True)

@@ -122,9 +122,11 @@ def list_moves(
     limit: int | None = None,
 ) -> list[dict]:
     """Return archived ≥min_pct moves within the lookback window,
-    newest first. Each row carries the ticker symbol."""
+    newest first. Each row carries the ticker symbol + the persisted
+    `reviewed` flag (defaults False)."""
     data = _load()
     tickers = data.get("tickers") or {}
+    reviewed_map = (data.get("reviewed") or {})
     cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
     out: list[dict] = []
     for sym, rec in tickers.items():
@@ -138,12 +140,30 @@ def list_moves(
             d = m.get("date") or ""
             if d < cutoff:
                 continue
-            out.append({**m, "ticker": sym})
+            key = f"{sym}:{d}"
+            row = {**m, "ticker": sym, "reviewed": bool(reviewed_map.get(key, False))}
+            out.append(row)
     out.sort(key=lambda r: (r.get("date") or "",
                             -float(r.get("upside_pct") or 0)), reverse=True)
     if limit is not None:
         out = out[:limit]
     return out
+
+
+def mark_reviewed(ticker: str, date_str: str, reviewed: bool = True) -> None:
+    """Persist the reviewed flag for one (ticker, date) move row."""
+    sym = ticker.upper().strip()
+    if not sym or not date_str:
+        return
+    key = f"{sym}:{date_str}"
+    with _WRITE_LOCK:
+        data = _load()
+        reviewed_map = data.setdefault("reviewed", {})
+        if reviewed:
+            reviewed_map[key] = True
+        else:
+            reviewed_map.pop(key, None)
+        _save(data)
 
 
 def stats() -> dict:
@@ -165,17 +185,20 @@ def stats() -> dict:
             if not latest or (d and d > latest):
                 latest = d
     meta = data.get("meta") or {}
+    reviewed_count = len(data.get("reviewed") or {})
     return {
-        "tickers_deep_scanned": len(tickers),
+        "tickers_scanned":      len(tickers),
         "tickers_with_moves":   tickers_with_moves,
         "total_moves":          total_moves,
+        "reviewed_moves":       reviewed_count,
         "earliest_date":        earliest,
         "latest_date":          latest,
-        # Pass-1 stats (set by the worker so we can see full universe
-        # coverage even though pass-1 negatives aren't kept individually).
-        "pass1_total":          meta.get("pass1_total", 0),
-        "pass1_processed":      meta.get("pass1_processed", 0),
-        "pass1_survivors":      meta.get("pass1_survivors", 0),
+        # Worker progress from meta (set by the worker so the page
+        # can show live coverage during a run).
+        "universe_size":        meta.get("universe_size", 0),
+        "to_scan":              meta.get("to_scan", 0),
+        "processed":            meta.get("processed", 0),
+        "with_moves":           meta.get("with_moves", 0),
         "last_run_ts":          meta.get("last_run_ts", ""),
         "in_progress":          meta.get("in_progress", False),
     }
