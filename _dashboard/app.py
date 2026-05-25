@@ -1520,6 +1520,195 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
     )
 
 
+# =============================================================================
+# Replay — 6-month archive of ≥50% pre-market moves
+# =============================================================================
+def render_replay() -> None:
+    from replay_archive import (
+        list_moves, stats as replay_stats, MIN_MOVE_PCT, LOOKBACK_DAYS,
+    )
+
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Replay</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">≥50% Pre-Market Moves</div>
+        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:14px;
+          max-width:780px;line-height:1.55;">
+          Every ticker-day in the past six months where the pre-market
+          window (4:00–9:29 AM ET) ran ≥50% from PM low to PM high.
+          Sorted newest first. Click any ticker to open the catalysts
+          dialog.</div>""",
+        unsafe_allow_html=True,
+    )
+
+    s = replay_stats()
+    moves = list_moves(min_pct=MIN_MOVE_PCT, lookback_days=LOOKBACK_DAYS)
+
+    # Build a per-ticker sector lookup so the table can carry GICS info.
+    sector_lookup: dict[str, tuple[str, str]] = {}
+    try:
+        from screener import fetch_nasdaq_universe, classify_ticker_sector
+        for nrow in fetch_nasdaq_universe():
+            sym = (nrow.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            cls = classify_ticker_sector(nrow)
+            if cls is None:
+                continue
+            sector_lookup[sym] = cls
+    except Exception:
+        pass
+
+    def _human_sub_label(sec: str, sub_key: str) -> str:
+        try:
+            return SECTORS[sec][sub_key][0]
+        except Exception:
+            return (sub_key or "").replace("_", " ")
+
+    st.markdown(
+        f"""<div style="display:flex;gap:24px;margin-bottom:18px;
+          flex-wrap:wrap;">
+          <span style="color:{WHITE};font-weight:600;">
+            Moves logged: {len(moves):,}</span>
+          <span style="color:{WHITE_DIM};">
+            Tickers scanned: {s.get('tickers_scanned', 0):,}</span>
+          <span style="color:{WHITE_DIM};">
+            Coverage: {s.get('earliest_date') or '—'} → {s.get('latest_date') or '—'}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if not moves:
+        st.info(
+            "Replay archive is empty. The background worker scans up to "
+            "200 tickers per app start (capped to keep cold loads fast) "
+            "and writes results to disk. Refresh in a few minutes — "
+            "rows will appear as the worker collects them."
+        )
+        return
+
+    head_cells = "".join(
+        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Date",      "left"),
+            ("Ticker",    "left"),
+            ("Sector",    "left"),
+            ("PM Low",    "right"),
+            ("PM High",   "right"),
+            ("PM Move",   "right"),
+            ("Type",      "left"),
+            ("Catalyst",  "left"),
+            ("Source",    "center"),
+        ]
+    )
+
+    body_rows = []
+    for r in moves:
+        sym = r.get("ticker", "")
+        date_str = r.get("date", "")
+        pm_low = r.get("pm_low")
+        pm_high = r.get("pm_high")
+        pm_low_time = r.get("pm_low_time") or ""
+        pm_high_time = r.get("pm_high_time") or ""
+        upside = float(r.get("upside_pct") or 0)
+        move_color = GOOD if upside >= 100 else (WARN if upside >= 75 else ACCENT)
+
+        ticker_html = (
+            f"<a href='?ticker={sym}' target='_self' "
+            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
+            f"border-bottom:1px dotted {ACCENT};'>{sym}</a>"
+        )
+
+        cls = sector_lookup.get(sym)
+        if cls:
+            sec, sub = cls
+            sub_label = _human_sub_label(sec, sub)
+            sector_html = (
+                f"<div style='color:{WHITE};font-size:0.8rem;"
+                f"font-weight:600;line-height:1.25;'>{sec}</div>"
+                f"<div style='color:{WHITE_MUTE};font-size:0.68rem;"
+                f"line-height:1.25;'>{sub_label}</div>"
+            )
+        else:
+            sector_html = f"<span style='color:#64748b;'>—</span>"
+
+        pm_low_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
+            f"${pm_low:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_low_time}</div>"
+               if pm_low_time else "")
+        ) if pm_low else f"<span style='color:#64748b;'>—</span>"
+
+        pm_high_cell = (
+            f"<div style='color:{WHITE};font-weight:600;'>${pm_high:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_high_time}</div>"
+               if pm_high_time else "")
+        ) if pm_high else f"<span style='color:#64748b;'>—</span>"
+
+        type_label = r.get("type") or "—"
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.68rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        )
+
+        title = r.get("title") or ""
+        catalyst_text = title if title else f"<span style='color:#64748b;'>—</span>"
+
+        src = r.get("source") or "—"
+        link = r.get("link") or ""
+        if link and src != "—":
+            source_html = (
+                f"<a href='{link}' target='_blank' "
+                f"style='color:{ACCENT};text-decoration:none;"
+                f"font-size:0.76rem;white-space:nowrap;'>{src} ↗</a>"
+            )
+        else:
+            source_html = (
+                f"<span style='color:#64748b;font-size:0.76rem;'>{src}</span>"
+            )
+
+        body_rows.append(
+            f"<tr>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};font-weight:500;white-space:nowrap;"
+            f"vertical-align:top;'>{date_str}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{ticker_html}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{sector_html}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{move_color};text-align:right;font-weight:700;"
+            f"vertical-align:top;'>+{upside:.1f}%</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{type_badge}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.82rem;max-width:340px;"
+            f"vertical-align:top;'>{catalyst_text}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;vertical-align:top;'>{source_html}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"<table class='sierra-table'>"
+        f"<thead><tr>{head_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_ipo_calendar() -> None:
     if "ipo_tab" not in st.session_state:
         st.session_state.ipo_tab = "upcoming"
@@ -1672,6 +1861,67 @@ def _kickoff_background_classifier() -> None:
 
 
 # =============================================================================
+# Replay archive background worker
+# =============================================================================
+# Scans tickers in the $1–$20 screen for their ≥50% pre-market moves
+# and persists each to .pm_replay_cache.json. yfinance caps 5-minute
+# intraday history at ~60 days, so the archive accumulates over time
+# until it covers a true rolling six-month window.
+# =============================================================================
+_REPLAY_BG_LOCK = _threading.Lock()
+_REPLAY_BG_STARTED = False
+
+
+def _kickoff_replay_archive_worker() -> None:
+    global _REPLAY_BG_STARTED
+    with _REPLAY_BG_LOCK:
+        if _REPLAY_BG_STARTED:
+            return
+        _REPLAY_BG_STARTED = True
+
+    def _worker() -> None:
+        try:
+            from data import fetch_premarket_catalysts
+            from screener import fetch_nasdaq_universe, _parse_price
+            from replay_archive import (
+                record_moves, is_stale, MIN_MOVE_PCT,
+            )
+            raw = fetch_nasdaq_universe()
+            todo: list[str] = []
+            for r in raw:
+                sym = (r.get("symbol") or "").strip().upper()
+                if not sym or any(c in sym for c in ".^$/"):
+                    continue
+                price = _parse_price(r.get("lastsale"))
+                if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
+                    continue
+                # Skip tickers we've scanned within the last 24h —
+                # their archive is already current.
+                if not is_stale(sym, max_age_hours=24):
+                    continue
+                todo.append(sym)
+            # Cap to 200 tickers per worker run so a single app start
+            # finishes in reasonable time on Streamlit Cloud (next run
+            # picks up where this one left off via is_stale gating).
+            todo = todo[:200]
+            for sym in todo:
+                try:
+                    moves = fetch_premarket_catalysts(
+                        sym, min_upside_pct=MIN_MOVE_PCT, lookback_days=60,
+                    )
+                    if moves:
+                        record_moves(sym, moves)
+                except Exception:
+                    pass
+        except Exception as e:
+            import sys
+            print(f"[replay-bg] failed: {e}", file=sys.stderr)
+
+    t = _threading.Thread(target=_worker, daemon=True, name="replay-bg")
+    t.start()
+
+
+# =============================================================================
 # Main
 # =============================================================================
 def main() -> None:
@@ -1686,6 +1936,10 @@ def main() -> None:
     # Kick off the background Gemini classifier on first load of this
     # process. Pure no-op when the key is missing or all tickers cached.
     _kickoff_background_classifier()
+    # Replay archive worker — scans tickers for ≥50% PM moves and
+    # writes them to .pm_replay_cache.json. Capped at 200 tickers per
+    # process run; resumes via is_stale gating on next start.
+    _kickoff_replay_archive_worker()
 
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
@@ -1804,6 +2058,16 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
+                "🎬 Replay",
+                use_container_width=True,
+                key="replay_btn",
+                type="primary" if st.session_state.view == "replay" else "secondary",
+                help="Historical 50%+ pre-market moves, past 6 months",
+            ):
+                st.session_state.view = "replay"
+                st.rerun()
+
+            if st.button(
                 "📋 Changelog",
                 use_container_width=True,
                 key="changelog_btn",
@@ -1874,6 +2138,10 @@ def main() -> None:
 
     if st.session_state.view == "ipo":
         render_ipo_calendar()
+        return
+
+    if st.session_state.view == "replay":
+        render_replay()
         return
 
     uni_mod = {
