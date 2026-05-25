@@ -1534,13 +1534,14 @@ def render_backtesting() -> None:
             text-transform:uppercase;letter-spacing:1px;">Backtesting</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">≥50% Pre-Market Moves</div>
+          letter-spacing:-0.5px;margin-bottom:6px;">≥100% Pre-Market Moves</div>
         <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:14px;
           max-width:780px;line-height:1.55;">
-          Every ticker-day in the past six months where the pre-market
-          window (4:00–9:29 AM ET) ran ≥50% from PM low to PM high.
-          Sorted newest first. Click any ticker to open the catalysts
-          dialog.</div>""",
+          Every ticker-day in the past six months — across the full
+          US-listed universe — where the pre-market window
+          (4:00–9:29 AM ET) doubled or better from PM low to PM high.
+          Sorted most-recent first. Click any ticker to open the
+          catalysts dialog.</div>""",
         unsafe_allow_html=True,
     )
 
@@ -1617,7 +1618,16 @@ def render_backtesting() -> None:
         pm_low_time = r.get("pm_low_time") or ""
         pm_high_time = r.get("pm_high_time") or ""
         upside = float(r.get("upside_pct") or 0)
-        move_color = GOOD if upside >= 100 else (WARN if upside >= 75 else ACCENT)
+        # Re-tiered for the 100%+ floor: bright green ≥300, green ≥200,
+        # yellow ≥150, accent at the 100-149 base tier.
+        if upside >= 300:
+            move_color = "#22c55e"
+        elif upside >= 200:
+            move_color = GOOD
+        elif upside >= 150:
+            move_color = WARN
+        else:
+            move_color = ACCENT
 
         ticker_html = (
             f"<a href='?ticker={sym}' target='_self' "
@@ -1863,10 +1873,12 @@ def _kickoff_background_classifier() -> None:
 # =============================================================================
 # Backtest archive background worker
 # =============================================================================
-# Scans tickers in the $1–$20 screen for their ≥50% pre-market moves
-# and persists each to .pm_backtest_cache.json. yfinance caps 5-minute
-# intraday history at ~60 days, so the archive accumulates over time
-# until it covers a true rolling six-month window.
+# Scans every valid US-listed ticker for ≥100% pre-market moves
+# (PM High vs PM Low, 4:00–9:29 AM ET) and persists each to
+# .pm_backtest_cache.json. No live-screen price filter — historical
+# coverage includes tickers above $20 today. yfinance caps 5-minute
+# intraday history at ~60 days, so the archive accumulates over
+# time until it covers a true rolling six-month window.
 # =============================================================================
 _BACKTEST_BG_LOCK = _threading.Lock()
 _BACKTEST_BG_STARTED = False
@@ -1908,7 +1920,9 @@ def _kickoff_backtest_archive_worker() -> None:
 
             CANDIDATES_PER_RUN = 800   # daily-bar pre-filter is cheap
             DAILY_BATCH = 80
-            BIG_DAY_RATIO = 1.0 + (MIN_MOVE_PCT / 100.0)  # high/low ≥ 1.5
+            # At MIN_MOVE_PCT=100 this becomes high/low ≥ 2.0 — a day
+            # where the stock at minimum doubled top-to-bottom.
+            BIG_DAY_RATIO = 1.0 + (MIN_MOVE_PCT / 100.0)
 
             # ----- Collect candidate symbols (every valid US ticker) -
             raw = fetch_nasdaq_universe()
@@ -2117,7 +2131,7 @@ def main() -> None:
                 use_container_width=True,
                 key="backtesting_btn",
                 type="primary" if st.session_state.view == "backtesting" else "secondary",
-                help="Historical 50%+ pre-market moves, past 6 months",
+                help="Full US universe — historical 100%+ pre-market moves, past 6 months",
             ):
                 st.session_state.view = "backtesting"
                 st.rerun()

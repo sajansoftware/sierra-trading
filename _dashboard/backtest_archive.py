@@ -37,7 +37,7 @@ from typing import Any
 
 
 CACHE_PATH = Path(__file__).resolve().parent / ".pm_backtest_cache.json"
-MIN_MOVE_PCT = 50.0
+MIN_MOVE_PCT = 100.0
 LOOKBACK_DAYS = 180   # 6 months
 
 
