@@ -1602,12 +1602,20 @@ def render_backtesting() -> None:
     )
 
     if not moves:
-        st.info(
-            "Replay archive is empty. The background worker scans up to "
-            "200 tickers per app start (capped to keep cold loads fast) "
-            "and writes results to disk. Refresh in a few minutes — "
-            "rows will appear as the worker collects them."
-        )
+        if in_prog:
+            st.info(
+                f"Backtest archive is being built right now — "
+                f"{p1_done:,} of {p1_total:,} tickers checked so far. "
+                "Refresh in a few minutes; rows appear as the worker "
+                "finds them."
+            )
+        else:
+            st.info(
+                "Backtest archive is empty. The background worker fires on "
+                "every app startup — restart the Streamlit process if you "
+                "don't see RUNNING above. Watch the terminal for "
+                "`[backtest-bg]` log lines."
+            )
         return
 
     head_cells = "".join(
