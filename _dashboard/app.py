@@ -1880,34 +1880,89 @@ def _kickoff_backtest_archive_worker() -> None:
         _BACKTEST_BG_STARTED = True
 
     def _worker() -> None:
+        """Scan every NASDAQ / NYSE / AMEX ticker for historical
+        ≥50% PM moves — not just the live $1–$20 screen.
+
+        Two-pass design so we don't burn yfinance bandwidth on
+        names that obviously never moved:
+
+          Pass 1 (cheap) — batch-download 6mo daily bars in chunks
+          of 80 tickers. Daily range ≥ 50% means a PM ≥ 50% move
+          is at least possible that day. Tickers whose entire 6mo
+          history has zero such days are skipped.
+
+          Pass 2 (expensive) — for each surviving ticker, fetch
+          5-minute intraday bars via fetch_premarket_catalysts and
+          record any precise PM-window moves ≥ MIN_MOVE_PCT.
+
+        Per-run candidate cap keeps a single process lifetime
+        bounded; subsequent runs resume via is_stale gating.
+        """
         try:
+            import yfinance as yf
             from data import fetch_premarket_catalysts
-            from screener import fetch_nasdaq_universe, _parse_price
+            from screener import fetch_nasdaq_universe
             from backtest_archive import (
                 record_moves, is_stale, MIN_MOVE_PCT,
             )
+
+            CANDIDATES_PER_RUN = 800   # daily-bar pre-filter is cheap
+            DAILY_BATCH = 80
+            BIG_DAY_RATIO = 1.0 + (MIN_MOVE_PCT / 100.0)  # high/low ≥ 1.5
+
+            # ----- Collect candidate symbols (every valid US ticker) -
             raw = fetch_nasdaq_universe()
-            todo: list[str] = []
+            candidates: list[str] = []
             for r in raw:
                 sym = (r.get("symbol") or "").strip().upper()
                 if not sym or any(c in sym for c in ".^$/"):
                     continue
-                price = _parse_price(r.get("lastsale"))
-                if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
-                    continue
-                # Skip tickers we've scanned within the last 24h —
-                # their archive is already current.
                 if not is_stale(sym, max_age_hours=24):
                     continue
-                todo.append(sym)
-            # Cap to 200 tickers per worker run so a single app start
-            # finishes in reasonable time on Streamlit Cloud (next run
-            # picks up where this one left off via is_stale gating).
-            todo = todo[:200]
-            for sym in todo:
+                candidates.append(sym)
+            candidates = candidates[:CANDIDATES_PER_RUN]
+            if not candidates:
+                return
+
+            # ----- Pass 1: daily-bar pre-filter (batched, fast) ------
+            survivors: list[str] = []
+            for i in range(0, len(candidates), DAILY_BATCH):
+                chunk = candidates[i:i + DAILY_BATCH]
                 try:
+                    df = yf.download(
+                        chunk, period="6mo", interval="1d",
+                        progress=False, group_by="ticker",
+                        auto_adjust=True, threads=True,
+                    )
+                except Exception:
+                    continue
+                for sym in chunk:
+                    try:
+                        ohlc = df[sym] if len(chunk) > 1 else df
+                        if ohlc is None or ohlc.empty:
+                            continue
+                        # high/low ratio ≥ 1.5 on any day means daily
+                        # range ≥ 50% — necessary (not sufficient) for
+                        # a PM-window move ≥ 50%.
+                        ratio = (ohlc["High"] / ohlc["Low"]).dropna()
+                        if (ratio >= BIG_DAY_RATIO).any():
+                            survivors.append(sym)
+                    except Exception:
+                        continue
+
+            # ----- Pass 2: precise PM-window scan for survivors ------
+            for sym in survivors:
+                try:
+                    # Wide price bounds so historical moves at any
+                    # price level are recorded (the dashboard's
+                    # $1-$20 screen is for the LIVE view, not the
+                    # historical archive).
                     moves = fetch_premarket_catalysts(
-                        sym, min_upside_pct=MIN_MOVE_PCT, lookback_days=60,
+                        sym,
+                        min_price=0.01,
+                        max_price=1_000_000.0,
+                        min_upside_pct=MIN_MOVE_PCT,
+                        lookback_days=60,
                     )
                     if moves:
                         record_moves(sym, moves)
