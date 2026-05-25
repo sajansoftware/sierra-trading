@@ -1521,17 +1521,17 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
 
 
 # =============================================================================
-# Replay — 6-month archive of ≥50% pre-market moves
+# Backtesting — 6-month archive of ≥50% pre-market moves
 # =============================================================================
-def render_replay() -> None:
-    from replay_archive import (
-        list_moves, stats as replay_stats, MIN_MOVE_PCT, LOOKBACK_DAYS,
+def render_backtesting() -> None:
+    from backtest_archive import (
+        list_moves, stats as bt_stats, MIN_MOVE_PCT, LOOKBACK_DAYS,
     )
 
     st.markdown(
         f"""<div style="margin-bottom:8px;">
           <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Replay</span>
+            text-transform:uppercase;letter-spacing:1px;">Backtesting</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
           letter-spacing:-0.5px;margin-bottom:6px;">≥50% Pre-Market Moves</div>
@@ -1544,7 +1544,7 @@ def render_replay() -> None:
         unsafe_allow_html=True,
     )
 
-    s = replay_stats()
+    s = bt_stats()
     moves = list_moves(min_pct=MIN_MOVE_PCT, lookback_days=LOOKBACK_DAYS)
 
     # Build a per-ticker sector lookup so the table can carry GICS info.
@@ -1861,29 +1861,29 @@ def _kickoff_background_classifier() -> None:
 
 
 # =============================================================================
-# Replay archive background worker
+# Backtest archive background worker
 # =============================================================================
 # Scans tickers in the $1–$20 screen for their ≥50% pre-market moves
-# and persists each to .pm_replay_cache.json. yfinance caps 5-minute
+# and persists each to .pm_backtest_cache.json. yfinance caps 5-minute
 # intraday history at ~60 days, so the archive accumulates over time
 # until it covers a true rolling six-month window.
 # =============================================================================
-_REPLAY_BG_LOCK = _threading.Lock()
-_REPLAY_BG_STARTED = False
+_BACKTEST_BG_LOCK = _threading.Lock()
+_BACKTEST_BG_STARTED = False
 
 
-def _kickoff_replay_archive_worker() -> None:
-    global _REPLAY_BG_STARTED
-    with _REPLAY_BG_LOCK:
-        if _REPLAY_BG_STARTED:
+def _kickoff_backtest_archive_worker() -> None:
+    global _BACKTEST_BG_STARTED
+    with _BACKTEST_BG_LOCK:
+        if _BACKTEST_BG_STARTED:
             return
-        _REPLAY_BG_STARTED = True
+        _BACKTEST_BG_STARTED = True
 
     def _worker() -> None:
         try:
             from data import fetch_premarket_catalysts
             from screener import fetch_nasdaq_universe, _parse_price
-            from replay_archive import (
+            from backtest_archive import (
                 record_moves, is_stale, MIN_MOVE_PCT,
             )
             raw = fetch_nasdaq_universe()
@@ -1915,9 +1915,9 @@ def _kickoff_replay_archive_worker() -> None:
                     pass
         except Exception as e:
             import sys
-            print(f"[replay-bg] failed: {e}", file=sys.stderr)
+            print(f"[backtest-bg] failed: {e}", file=sys.stderr)
 
-    t = _threading.Thread(target=_worker, daemon=True, name="replay-bg")
+    t = _threading.Thread(target=_worker, daemon=True, name="backtest-bg")
     t.start()
 
 
@@ -1936,10 +1936,10 @@ def main() -> None:
     # Kick off the background Gemini classifier on first load of this
     # process. Pure no-op when the key is missing or all tickers cached.
     _kickoff_background_classifier()
-    # Replay archive worker — scans tickers for ≥50% PM moves and
-    # writes them to .pm_replay_cache.json. Capped at 200 tickers per
+    # Backtest archive worker — scans tickers for ≥50% PM moves and
+    # writes them to .pm_backtest_cache.json. Capped at 200 tickers per
     # process run; resumes via is_stale gating on next start.
-    _kickoff_replay_archive_worker()
+    _kickoff_backtest_archive_worker()
 
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
@@ -2058,13 +2058,13 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "🎬 Replay",
+                "📊 Backtesting",
                 use_container_width=True,
-                key="replay_btn",
-                type="primary" if st.session_state.view == "replay" else "secondary",
+                key="backtesting_btn",
+                type="primary" if st.session_state.view == "backtesting" else "secondary",
                 help="Historical 50%+ pre-market moves, past 6 months",
             ):
-                st.session_state.view = "replay"
+                st.session_state.view = "backtesting"
                 st.rerun()
 
             if st.button(
@@ -2140,8 +2140,8 @@ def main() -> None:
         render_ipo_calendar()
         return
 
-    if st.session_state.view == "replay":
-        render_replay()
+    if st.session_state.view in ("backtesting", "replay"):
+        render_backtesting()
         return
 
     uni_mod = {

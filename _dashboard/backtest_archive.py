@@ -1,4 +1,4 @@
-"""Replay archive — persistent log of historical pre-market spikes.
+"""Backtest archive — persistent log of historical pre-market spikes.
 
 Each row in the archive is one ticker-day where the pre-market move
 (PM High vs PM Low, 4:00 AM – 9:29 AM ET) was ≥ MIN_MOVE_PCT.
@@ -10,7 +10,7 @@ Why persist instead of pull live every time:
   - Each scan is rate-limited and slow; the cache lets us avoid
     re-fetching what we already have.
 
-Cache file: .pm_replay_cache.json next to this module. Schema:
+Cache file: .pm_backtest_cache.json next to this module. Schema:
   {
     "tickers": {
       "ABC": {
@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 
-CACHE_PATH = Path(__file__).resolve().parent / ".pm_replay_cache.json"
+CACHE_PATH = Path(__file__).resolve().parent / ".pm_backtest_cache.json"
 MIN_MOVE_PCT = 50.0
 LOOKBACK_DAYS = 180   # 6 months
 
