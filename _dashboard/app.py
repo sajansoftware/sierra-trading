@@ -1569,15 +1569,34 @@ def render_backtesting() -> None:
         except Exception:
             return (sub_key or "").replace("_", " ")
 
+    p1_total = s.get("pass1_total", 0)
+    p1_done = s.get("pass1_processed", 0)
+    p1_pct = (p1_done / p1_total * 100) if p1_total else 0
+    in_prog = s.get("in_progress")
+    status_color = ACCENT if in_prog else GOOD
+    status_label = "RUNNING" if in_prog else "IDLE"
+
     st.markdown(
-        f"""<div style="display:flex;gap:24px;margin-bottom:18px;
-          flex-wrap:wrap;">
+        f"""<div style="display:flex;gap:24px;margin-bottom:6px;
+          flex-wrap:wrap;align-items:center;">
+          <span style="font-size:0.66rem;font-weight:700;color:{status_color};
+            background:rgba(100,181,246,0.12);padding:3px 8px;
+            border-radius:4px;letter-spacing:1px;">{status_label}</span>
           <span style="color:{WHITE};font-weight:600;">
             Moves logged: {len(moves):,}</span>
           <span style="color:{WHITE_DIM};">
-            Tickers scanned: {s.get('tickers_scanned', 0):,}</span>
+            Tickers with ≥100% moves: {s.get('tickers_with_moves', 0):,}</span>
           <span style="color:{WHITE_DIM};">
             Coverage: {s.get('earliest_date') or '—'} → {s.get('latest_date') or '—'}</span>
+        </div>
+        <div style="display:flex;gap:24px;margin-bottom:18px;
+          flex-wrap:wrap;font-size:0.78rem;color:{WHITE_MUTE};">
+          <span>Universe processed: {p1_done:,} / {p1_total:,}
+            ({p1_pct:.0f}%)</span>
+          <span>Pass 1 survivors (had a 2× daily range day):
+            {s.get('pass1_survivors', 0):,}</span>
+          <span>Pass 2 deep-scanned: {s.get('tickers_deep_scanned', 0):,}</span>
+          <span>Last run: {s.get('last_run_ts') or '—'}</span>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -1916,7 +1935,7 @@ def _kickoff_backtest_archive_worker() -> None:
             from data import fetch_premarket_catalysts
             from screener import fetch_nasdaq_universe
             from backtest_archive import (
-                record_moves, is_stale, MIN_MOVE_PCT,
+                record_moves, is_stale, update_meta, MIN_MOVE_PCT,
             )
 
             DAILY_BATCH    = 80
@@ -1931,22 +1950,40 @@ def _kickoff_backtest_archive_worker() -> None:
 
             # ----- Collect candidate symbols (every valid US ticker) -
             raw = fetch_nasdaq_universe()
+            all_valid: list[str] = []
             candidates: list[str] = []
             for r in raw:
                 sym = (r.get("symbol") or "").strip().upper()
                 if not sym or any(c in sym for c in ".^$/"):
                     continue
+                all_valid.append(sym)
                 if not is_stale(sym, max_age_hours=STALE_HOURS):
                     continue
                 candidates.append(sym)
+            _log(f"universe size: {len(all_valid)} valid tickers; "
+                 f"{len(candidates)} to scan this run "
+                 f"({len(all_valid) - len(candidates)} already fresh)")
             if not candidates:
-                _log("all tickers fresh — nothing to do this run.")
+                update_meta(
+                    pass1_total=len(all_valid),
+                    pass1_processed=len(all_valid),
+                    in_progress=False,
+                )
                 return
-            _log(f"starting scan: {len(candidates)} candidate tickers")
+            update_meta(
+                pass1_total=len(candidates),
+                pass1_processed=0,
+                pass1_survivors=0,
+                in_progress=True,
+                last_run_ts=__import__("time").strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()
+                ),
+            )
 
             # ----- Pass 1: daily-bar pre-filter (batched, fast) ------
             survivors: list[str] = []
             n_chunks = (len(candidates) + DAILY_BATCH - 1) // DAILY_BATCH
+            processed = 0
             for i in range(0, len(candidates), DAILY_BATCH):
                 chunk = candidates[i:i + DAILY_BATCH]
                 try:
@@ -1957,6 +1994,9 @@ def _kickoff_backtest_archive_worker() -> None:
                     )
                 except Exception as e:
                     _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks} dl failed: {e}")
+                    processed += len(chunk)
+                    update_meta(pass1_processed=processed,
+                                pass1_survivors=len(survivors))
                     continue
                 chunk_survivors = 0
                 for sym in chunk:
@@ -1973,9 +2013,13 @@ def _kickoff_backtest_archive_worker() -> None:
                             chunk_survivors += 1
                     except Exception:
                         continue
+                processed += len(chunk)
                 _log(f"pass1 chunk {i//DAILY_BATCH+1}/{n_chunks}: "
                      f"+{chunk_survivors} survivors "
-                     f"(total {len(survivors)})")
+                     f"({processed}/{len(candidates)} processed, "
+                     f"{len(survivors)} total survivors)")
+                update_meta(pass1_processed=processed,
+                            pass1_survivors=len(survivors))
 
             if not survivors:
                 _log("no survivors from pass1.")
@@ -2016,9 +2060,15 @@ def _kickoff_backtest_archive_worker() -> None:
                              f"({with_moves} tickers with ≥100% moves)")
             _log(f"pass2 finished: {done}/{len(survivors)} done, "
                  f"{with_moves} tickers contributed moves")
+            update_meta(in_progress=False)
         except Exception as e:
             import sys
             print(f"[backtest-bg] failed: {e}", file=sys.stderr, flush=True)
+            try:
+                from backtest_archive import update_meta as _um
+                _um(in_progress=False)
+            except Exception:
+                pass
 
     t = _threading.Thread(target=_worker, daemon=True, name="backtest-bg")
     t.start()

@@ -152,20 +152,47 @@ def stats() -> dict:
     total_moves = 0
     earliest = ""
     latest = ""
+    tickers_with_moves = 0
     for rec in tickers.values():
-        for m in rec.get("moves") or []:
+        moves = rec.get("moves") or []
+        if moves:
+            tickers_with_moves += 1
+        for m in moves:
             total_moves += 1
             d = m.get("date") or ""
             if not earliest or (d and d < earliest):
                 earliest = d
             if not latest or (d and d > latest):
                 latest = d
+    meta = data.get("meta") or {}
     return {
-        "tickers_scanned":  len(tickers),
-        "total_moves":      total_moves,
-        "earliest_date":    earliest,
-        "latest_date":      latest,
+        "tickers_deep_scanned": len(tickers),
+        "tickers_with_moves":   tickers_with_moves,
+        "total_moves":          total_moves,
+        "earliest_date":        earliest,
+        "latest_date":          latest,
+        # Pass-1 stats (set by the worker so we can see full universe
+        # coverage even though pass-1 negatives aren't kept individually).
+        "pass1_total":          meta.get("pass1_total", 0),
+        "pass1_processed":      meta.get("pass1_processed", 0),
+        "pass1_survivors":      meta.get("pass1_survivors", 0),
+        "last_run_ts":          meta.get("last_run_ts", ""),
+        "in_progress":          meta.get("in_progress", False),
     }
+
+
+def update_meta(**kwargs) -> None:
+    """Patch the cache `meta` block with run stats (in-progress flag,
+    pass-1 totals, etc.). Concurrency-safe."""
+    with _WRITE_LOCK:
+        data = _load()
+        meta = data.get("meta") or {}
+        meta.update(kwargs)
+        meta["last_updated_ts"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+        )
+        data["meta"] = meta
+        _save(data)
 
 
 def is_stale(ticker: str, max_age_hours: int = 24) -> bool:
