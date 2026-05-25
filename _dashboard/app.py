@@ -1619,86 +1619,156 @@ def render_backtesting() -> None:
             )
         return
 
-    # Build the interactive table via st.data_editor — the Reviewed
-    # column is a real checkbox column whose state persists to disk.
-    import pandas as pd
-    from backtest_archive import mark_reviewed
+    head_cells = "".join(
+        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Date",      "left"),
+            ("Ticker",    "left"),
+            ("Sector",    "left"),
+            ("PM Low",    "right"),
+            ("PM High",   "right"),
+            ("PM Move",   "right"),
+            ("Type",      "left"),
+            ("Catalyst",  "left"),
+            ("Source",    "center"),
+        ]
+    )
 
-    rows = []
+    body_rows = []
     for r in moves:
         sym = r.get("ticker", "")
+        date_str = r.get("date", "")
+        pm_low = r.get("pm_low")
+        pm_high = r.get("pm_high")
+        pm_low_time = r.get("pm_low_time") or ""
+        pm_high_time = r.get("pm_high_time") or ""
+        upside = float(r.get("upside_pct") or 0)
+        reviewed = bool(r.get("reviewed", False))
+        # Re-tiered for the 100%+ floor: bright green ≥300, green ≥200,
+        # yellow ≥150, accent at the 100-149 base tier.
+        if upside >= 300:
+            move_color = "#22c55e"
+        elif upside >= 200:
+            move_color = GOOD
+        elif upside >= 150:
+            move_color = WARN
+        else:
+            move_color = ACCENT
+
+        ticker_html = (
+            f"<a href='?ticker={sym}' target='_self' "
+            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
+            f"border-bottom:1px dotted {ACCENT};'>{sym}</a>"
+        )
+
         cls = sector_lookup.get(sym)
         if cls:
             sec, sub = cls
             sub_label = _human_sub_label(sec, sub)
-        else:
-            sec, sub_label = "—", "—"
-
-        pm_low = r.get("pm_low")
-        pm_high = r.get("pm_high")
-        upside = float(r.get("upside_pct") or 0)
-        rows.append({
-            "Reviewed":     bool(r.get("reviewed", False)),
-            "Date":         r.get("date", ""),
-            "Ticker":       sym,
-            "Sector":       sec,
-            "Sub-Sector":   sub_label,
-            "PM Low":       float(pm_low) if pm_low else None,
-            "PM Low Time":  r.get("pm_low_time", "") or "",
-            "PM High":      float(pm_high) if pm_high else None,
-            "PM High Time": r.get("pm_high_time", "") or "",
-            "PM Move %":    upside,
-            "Type":         r.get("type") or "—",
-            "Catalyst":     r.get("title", "") or "",
-            "Source":       (
-                r.get("link") if r.get("link") else r.get("source", "—")
-            ),
-        })
-
-    df = pd.DataFrame(rows)
-    edited = st.data_editor(
-        df,
-        column_config={
-            "Reviewed": st.column_config.CheckboxColumn(
-                "✓",
-                help="Tick once you've reviewed this move",
-                width="small",
-                default=False,
-            ),
-            "Date":         st.column_config.TextColumn("Date", width="small"),
-            "Ticker":       st.column_config.TextColumn("Ticker", width="small"),
-            "Sector":       st.column_config.TextColumn("Sector", width="medium"),
-            "Sub-Sector":   st.column_config.TextColumn("Sub-Sector", width="medium"),
-            "PM Low":       st.column_config.NumberColumn(
-                "PM Low", format="$%.2f", width="small"),
-            "PM Low Time":  st.column_config.TextColumn("PM Low Time", width="small"),
-            "PM High":      st.column_config.NumberColumn(
-                "PM High", format="$%.2f", width="small"),
-            "PM High Time": st.column_config.TextColumn("PM High Time", width="small"),
-            "PM Move %":    st.column_config.ProgressColumn(
-                "PM Move %", format="+%.1f%%",
-                min_value=100, max_value=500, width="small"),
-            "Type":         st.column_config.TextColumn("Type", width="small"),
-            "Catalyst":     st.column_config.TextColumn("Catalyst", width="large"),
-            "Source":       st.column_config.LinkColumn(
-                "Source", width="small", display_text="open ↗"),
-        },
-        disabled=[c for c in df.columns if c != "Reviewed"],
-        hide_index=True,
-        use_container_width=True,
-        height=min(700, 60 + 35 * len(rows)),
-        key="backtest_data_editor",
-    )
-
-    # Persist any toggled Reviewed checkboxes back to disk.
-    edited_records = edited.to_dict("records")
-    for orig_move, new_row in zip(moves, edited_records):
-        orig_r = bool(orig_move.get("reviewed", False))
-        new_r = bool(new_row.get("Reviewed", False))
-        if orig_r != new_r:
-            mark_reviewed(
-                orig_move["ticker"], orig_move.get("date", ""), new_r
+            sector_html = (
+                f"<div style='color:{WHITE};font-size:0.8rem;"
+                f"font-weight:600;line-height:1.25;'>{sec}</div>"
+                f"<div style='color:{WHITE_MUTE};font-size:0.68rem;"
+                f"line-height:1.25;'>{sub_label}</div>"
             )
+        else:
+            sector_html = f"<span style='color:#64748b;'>—</span>"
+
+        pm_low_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
+            f"${pm_low:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_low_time}</div>"
+               if pm_low_time else "")
+        ) if pm_low else f"<span style='color:#64748b;'>—</span>"
+
+        pm_high_cell = (
+            f"<div style='color:{WHITE};font-weight:600;'>${pm_high:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_high_time}</div>"
+               if pm_high_time else "")
+        ) if pm_high else f"<span style='color:#64748b;'>—</span>"
+
+        type_label = r.get("type") or "—"
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.68rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        )
+
+        title = r.get("title") or ""
+        catalyst_text = title if title else f"<span style='color:#64748b;'>—</span>"
+
+        src = r.get("source") or "—"
+        link = r.get("link") or ""
+        if link and src != "—":
+            source_link_html = (
+                f"<a href='{link}' target='_blank' "
+                f"style='color:{ACCENT};text-decoration:none;"
+                f"font-size:0.76rem;white-space:nowrap;'>{src} ↗</a>"
+            )
+        else:
+            source_link_html = (
+                f"<span style='color:#64748b;font-size:0.76rem;'>{src}</span>"
+            )
+
+        # Clickable reviewed-toggle next to the source. Filled green
+        # check when reviewed, empty box otherwise. Navigates to
+        # ?toggle_reviewed=TICKER:DATE which the main() handler
+        # consumes and persists.
+        toggle_url = f"?toggle_reviewed={sym}:{date_str}"
+        if reviewed:
+            check_html = (
+                f"<a href='{toggle_url}' target='_self' "
+                f"title='Reviewed — click to unmark' "
+                f"style='display:inline-block;margin-right:6px;"
+                f"font-size:0.95rem;color:{GOOD};text-decoration:none;"
+                f"font-weight:700;'>✓</a>"
+            )
+        else:
+            check_html = (
+                f"<a href='{toggle_url}' target='_self' "
+                f"title='Click after reviewing' "
+                f"style='display:inline-block;margin-right:6px;"
+                f"font-size:0.95rem;color:{WHITE_MUTE};text-decoration:none;'>☐</a>"
+            )
+        source_html = check_html + source_link_html
+
+        row_opacity = "opacity:0.55;" if reviewed else ""
+        body_rows.append(
+            f"<tr style='{row_opacity}'>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};font-weight:500;white-space:nowrap;"
+            f"vertical-align:top;'>{date_str}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{ticker_html}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{sector_html}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{move_color};text-align:right;font-weight:700;"
+            f"vertical-align:top;'>+{upside:.1f}%</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{type_badge}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.82rem;max-width:340px;"
+            f"vertical-align:top;'>{catalyst_text}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;vertical-align:top;white-space:nowrap;'>{source_html}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"<table class='sierra-table'>"
+        f"<thead><tr>{head_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_ipo_calendar() -> None:
@@ -2031,6 +2101,24 @@ def main() -> None:
     if qp_ticker:
         st.session_state.selected_ticker = qp_ticker.strip().upper()
         st.query_params.clear()
+
+    # Backtesting reviewed-toggle: ?toggle_reviewed=TICKER:YYYY-MM-DD
+    qp_toggle = st.query_params.get("toggle_reviewed")
+    if qp_toggle:
+        try:
+            from backtest_archive import _load, mark_reviewed
+            parts = qp_toggle.split(":", 1)
+            if len(parts) == 2:
+                tkr, dt = parts[0].strip().upper(), parts[1].strip()
+                cache = _load()
+                key = f"{tkr}:{dt}"
+                currently = bool((cache.get("reviewed") or {}).get(key))
+                mark_reviewed(tkr, dt, not currently)
+        except Exception:
+            pass
+        st.query_params.clear()
+        st.session_state.view = "backtesting"
+        st.rerun()
 
     # Open the catalyst dialog FIRST (before any sector loading) so the
     # popup appears immediately on ticker click. Single-shot consume:
