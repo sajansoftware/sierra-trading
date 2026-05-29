@@ -363,6 +363,12 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
 MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
     # SOBR Safe — alcohol-detection wearables, not a newspaper.
     "SOBR": ("Health Care", "Medical_Devices"),
+    # AXIL Brands — hearing enhancement / protection products,
+    # not personal-care / beauty.
+    "AXIL": ("Health Care", "Dental_Vision_Hearing"),
+    # Bonk Inc — digital-infrastructure / crypto company,
+    # not personal-care / beauty.
+    "BNKK": ("Financials", "Crypto_Adjacent"),
 }
 
 
