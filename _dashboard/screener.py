@@ -352,6 +352,20 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
 }
 
 
+# Manual ticker-level overrides — wins ahead of EVERYTHING else
+# (Gemini cache, keyword rules, NASDAQ-sector fallback). For cases
+# where NASDAQ's industry string is just wrong (e.g. SOBR Safe is
+# tagged "Newspapers/Magazines") and we want the fix to ship
+# immediately without waiting for the AI classifier to run.
+#
+# Format: {TICKER: (sector_key, sub_sector_folder)}
+# Sub-sector folders must match keys in app.py SECTORS dict.
+MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
+    # SOBR Safe — alcohol-detection wearables, not a newspaper.
+    "SOBR": ("Health Care", "Medical_Devices"),
+}
+
+
 def keyword_classify(row: dict) -> tuple[str, str] | None:
     """Run only the deterministic keyword + NASDAQ-sector passes.
 
@@ -377,14 +391,13 @@ def keyword_classify(row: dict) -> tuple[str, str] | None:
 def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     """Return (sector_key, sub_sector_folder) for a NASDAQ screener row.
 
-    Three-pass classification:
-      0. Gemini cache hit — if google-classified disk cache has this
-         ticker, use that (LLM-driven, semantic). No API call here.
-      1. Industry-specific keyword mapping (INDUSTRY_TO_SECTOR_SUB) —
-         precise sub-sector when we recognise the industry.
-      2. NASDAQ sector fallback (ND_SECTOR_TO_DASHBOARD) — any ticker
-         whose industry we don't recognise falls into 'Other' within
-         its NASDAQ-declared sector.
+    Four-pass classification, first hit wins:
+      0a. Manual override (MANUAL_OVERRIDES) — for known-bad NASDAQ
+          data that we want to fix immediately, ahead of any other
+          source. Persists across deploys (in source).
+      0b. Gemini cache hit — LLM-driven semantic pick from disk cache.
+      1.  Industry-specific keyword mapping (INDUSTRY_TO_SECTOR_SUB).
+      2.  NASDAQ sector fallback (ND_SECTOR_TO_DASHBOARD).
 
     Returns None only if we have neither industry nor a recognisable
     sector to map to.
@@ -394,7 +407,11 @@ def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
     name = row.get("name") or ""
     sym = (row.get("symbol") or "").upper().strip()
 
-    # Pass 0: Gemini cache (no API call — disk lookup)
+    # Pass 0a: hand-written override
+    if sym and sym in MANUAL_OVERRIDES:
+        return MANUAL_OVERRIDES[sym]
+
+    # Pass 0b: Gemini cache (no API call — disk lookup)
     if sym:
         try:
             from gemini_classifier import cached_classification
