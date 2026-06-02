@@ -258,7 +258,7 @@ def classify_catalyst(title: str) -> str:
     return "Press Release"
 
 
-@st.cache_data(ttl=300, show_spinner=False)  # 5 min (intraday refresh)
+@st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
 def fetch_top_movers(
     universe_tickers: tuple[str, ...],
     min_pct: float = 20.0,
@@ -266,16 +266,19 @@ def fetch_top_movers(
     max_price: float = 20.0,
     max_float: int = 20_000_000,
     max_rows: int = 40,
+    window_start: str = "07:00",
+    window_end:   str = "09:29",
 ) -> list[dict]:
     """Today's biggest *pre-market* movers across the universe.
 
     A ticker qualifies when:
       - close $1-$20 and free float < 20M (passes_filter)
-      - pre-market move (PM high vs prior close) >= min_pct
-        within the 4:00 AM - 9:29 AM ET window
+      - PM move (PM high vs PM low) >= min_pct within the
+        [window_start, window_end] ET window.
 
-    LOD / HOD reported below are pre-market low / pre-market high
-    (not full-day). Returns rows sorted by PM move descending.
+    Default window is the "main" pre-market 7:00 - 9:29 AM ET when
+    most retail flow concentrates. Pass window_start="04:00",
+    window_end="06:59" for the "early" pre-market tab.
     """
     # FAST path: build seeds from NASDAQ + Finviz, skip yfinance .info
     # (it 401s constantly). yfinance.history per eligible ticker below
@@ -327,7 +330,7 @@ def fetch_top_movers(
             day_bars = hist[hist.index.date == today_et]
             if day_bars.empty:
                 return None
-            pm_bars = day_bars.between_time("04:00", "09:29")
+            pm_bars = day_bars.between_time(window_start, window_end)
             if pm_bars.empty:
                 return None
             pm_high = float(pm_bars["High"].max())

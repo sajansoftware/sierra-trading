@@ -948,19 +948,7 @@ def changelog_dialog() -> None:
 # =============================================================================
 # Today's top moves
 # =============================================================================
-def render_top_movers() -> None:
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:18px;">Today's Top Moves</div>""",
-        unsafe_allow_html=True,
-    )
-
-    # Pool of tickers = every ticker the dashboard knows about (curated +
-    # screener-discovered) across all sectors.
+def _top_movers_pool() -> tuple[str, ...]:
     pool: set[str] = set()
     for mod in (bio_universe, tech_universe, energy_universe,
                 industrials_universe, materials_universe,
@@ -974,17 +962,10 @@ def render_top_movers() -> None:
                 pool.update(mod.INFO.keys())
             except Exception:
                 continue
+    return tuple(sorted(pool))
 
-    with st.spinner("Scanning today's tape…"):
-        movers = fetch_top_movers(tuple(sorted(pool)))
 
-    if not movers:
-        st.info("No tickers in the universe moved ≥ 20% during pre-market today.")
-        return
-
-    # Build sector / sub-sector lookup from the screener so each mover
-    # row can carry its GICS classification. Cheap — fetch_nasdaq_universe
-    # is 24h-cached and classify_ticker_sector is pure dict lookup.
+def _build_movers_sector_lookup() -> dict[str, tuple[str, str]]:
     sector_lookup: dict[str, tuple[str, str]] = {}
     try:
         from screener import fetch_nasdaq_universe, classify_ticker_sector
@@ -998,6 +979,15 @@ def render_top_movers() -> None:
             sector_lookup[sym] = cls
     except Exception:
         pass
+    return sector_lookup
+
+
+def _render_movers_table(movers: list[dict],
+                         sector_lookup: dict[str, tuple[str, str]],
+                         empty_msg: str) -> None:
+    if not movers:
+        st.info(empty_msg)
+        return
 
     def _human_sub_label(sec: str, sub_key: str) -> str:
         try:
@@ -1092,6 +1082,65 @@ def render_top_movers() -> None:
         </table>""",
         unsafe_allow_html=True,
     )
+
+
+@st.fragment(run_every="1s")
+def _top_movers_fragment(window_start: str, window_end: str,
+                         window_label: str, empty_msg: str) -> None:
+    """Self-refreshing fragment — re-runs every second without re-running
+    the entire page. The underlying yfinance call is @st.cache_data
+    cached at 15s, so the API isn't actually hit every second."""
+    pool = _top_movers_pool()
+    sector_lookup = _build_movers_sector_lookup()
+    movers = fetch_top_movers(
+        pool, window_start=window_start, window_end=window_end,
+    )
+    try:
+        from zoneinfo import ZoneInfo
+        now_et = datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M:%S ET")
+    except Exception:
+        now_et = datetime.utcnow().strftime("%H:%M:%S UTC")
+    st.markdown(
+        f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
+        f"margin-bottom:10px;'>{window_label} &middot; "
+        f"last refresh {now_et} &middot; auto-updates every second "
+        f"(data cache 15s)</div>",
+        unsafe_allow_html=True,
+    )
+    _render_movers_table(movers, sector_lookup, empty_msg)
+
+
+def render_top_movers() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:14px;">Today's Top Moves</div>""",
+        unsafe_allow_html=True,
+    )
+
+    tab_main, tab_early = st.tabs(
+        ["Main pre-market (7:00 – 9:30 AM)",
+         "Early pre-market (4:00 – 7:00 AM)"]
+    )
+    with tab_main:
+        _top_movers_fragment(
+            window_start="07:00",
+            window_end="09:29",
+            window_label="Window 7:00 – 9:29 AM ET",
+            empty_msg=("No tickers in the universe moved ≥ 20% between "
+                       "7:00 and 9:30 AM ET today."),
+        )
+    with tab_early:
+        _top_movers_fragment(
+            window_start="04:00",
+            window_end="06:59",
+            window_label="Window 4:00 – 6:59 AM ET",
+            empty_msg=("No tickers in the universe moved ≥ 20% between "
+                       "4:00 and 7:00 AM ET today."),
+        )
 
 
 # =============================================================================
