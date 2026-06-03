@@ -1164,8 +1164,9 @@ def _top_movers_fragment(
         elif window_start == "04:00" and not in_early_pm and now_et.hour < 4:
             why = (" The 4:00–7:00 AM window is still in the future.")
         st.info(
-            f"No tickers in the universe moved ≥ 20% between "
-            f"{window_start} and {window_end} ET today.{why}"
+            f"No tickers met the criteria (≥50% move · $2–$20 · "
+            f"float <20M) between {window_start} and {window_end} "
+            f"ET today.{why}"
         )
         return
 
@@ -1179,7 +1180,11 @@ def render_top_movers() -> None:
             text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
         </div>
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:14px;">Today's Top Moves</div>""",
+          letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
+        <div style="font-size:0.78rem;color:{WHITE_DIM};
+          margin-bottom:14px;">Criteria: PM move ≥50% &middot;
+          price $2–$20 &middot; float &lt; 20M. Tab assignment is
+          driven by the time-of-day the move occurred.</div>""",
         unsafe_allow_html=True,
     )
 
