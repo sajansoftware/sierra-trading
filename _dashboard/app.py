@@ -1084,30 +1084,76 @@ def _render_movers_table(movers: list[dict],
     )
 
 
-@st.fragment(run_every="1s")
-def _top_movers_fragment(window_start: str, window_end: str,
-                         window_label: str, empty_msg: str) -> None:
-    """Self-refreshing fragment — re-runs every second without re-running
+@st.fragment(run_every="2s")
+def _top_movers_fragment(
+    pool: tuple[str, ...],
+    sector_lookup: dict[str, tuple[str, str]],
+    window_start: str,
+    window_end: str,
+    window_label: str,
+) -> None:
+    """Self-refreshing fragment — re-runs every 2s without re-running
     the entire page. The underlying yfinance call is @st.cache_data
-    cached at 15s, so the API isn't actually hit every second."""
-    pool = _top_movers_pool()
-    sector_lookup = _build_movers_sector_lookup()
-    movers = fetch_top_movers(
-        pool, window_start=window_start, window_end=window_end,
-    )
+    cached at 15s, so the API isn't actually hit every 2s."""
     try:
         from zoneinfo import ZoneInfo
-        now_et = datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M:%S ET")
+        now_et = datetime.now(ZoneInfo("America/New_York"))
     except Exception:
-        now_et = datetime.utcnow().strftime("%H:%M:%S UTC")
+        now_et = datetime.utcnow()
+    now_str = now_et.strftime("%H:%M:%S %Z") or now_et.strftime("%H:%M:%S")
+
+    try:
+        movers = fetch_top_movers(
+            pool, window_start=window_start, window_end=window_end,
+        )
+        scan_err = None
+    except Exception as e:
+        movers = []
+        scan_err = f"{type(e).__name__}: {e}"
+
+    is_weekend = now_et.weekday() >= 5
+    in_main_pm = (7, 0) <= (now_et.hour, now_et.minute) < (9, 30)
+    in_early_pm = (4, 0) <= (now_et.hour, now_et.minute) < (7, 0)
+
+    diag_bits = [f"{window_label}", f"as of {now_str}"]
+    if is_weekend:
+        diag_bits.append("⚠ weekend — no fresh PM data today")
+    elif (window_start == "07:00" and now_et.hour < 7):
+        diag_bits.append("ℹ market hasn't opened the main PM window yet")
+    elif (window_start == "04:00" and now_et.hour < 4):
+        diag_bits.append("ℹ early PM hasn't started yet")
+
     st.markdown(
         f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
-        f"margin-bottom:10px;'>{window_label} &middot; "
-        f"last refresh {now_et} &middot; auto-updates every second "
-        f"(data cache 15s)</div>",
+        f"margin-bottom:6px;'>{' &middot; '.join(diag_bits)}</div>"
+        f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
+        f"margin-bottom:10px;'>Universe pool: {len(pool):,} tickers "
+        f"&middot; movers found: {len(movers):,} &middot; "
+        f"auto-refresh every 2s (data cache 15s)</div>",
         unsafe_allow_html=True,
     )
-    _render_movers_table(movers, sector_lookup, empty_msg)
+
+    if scan_err:
+        st.error(f"Scan failed: {scan_err}")
+        return
+
+    if not movers:
+        why = ""
+        if is_weekend:
+            why = (" Pre-market data is only published during trading "
+                   "days (Mon–Fri).")
+        elif window_start == "07:00" and not in_main_pm and now_et.hour < 7:
+            why = (" The 7:00–9:30 AM window is still in the future — "
+                   "check back after 7:00 AM ET.")
+        elif window_start == "04:00" and not in_early_pm and now_et.hour < 4:
+            why = (" The 4:00–7:00 AM window is still in the future.")
+        st.info(
+            f"No tickers in the universe moved ≥ 20% between "
+            f"{window_start} and {window_end} ET today.{why}"
+        )
+        return
+
+    _render_movers_table(movers, sector_lookup, empty_msg="")
 
 
 def render_top_movers() -> None:
@@ -1121,25 +1167,37 @@ def render_top_movers() -> None:
         unsafe_allow_html=True,
     )
 
+    # Build the pool + sector lookup ONCE at page render — both are
+    # cheap and don't need to re-run on the per-fragment tick.
+    with st.spinner("Loading universe…"):
+        pool = _top_movers_pool()
+        sector_lookup = _build_movers_sector_lookup()
+    if not pool:
+        st.warning(
+            "Universe pool is empty. Check that the sector universe "
+            "modules import correctly."
+        )
+        return
+
     tab_main, tab_early = st.tabs(
         ["Main pre-market (7:00 – 9:30 AM)",
          "Early pre-market (4:00 – 7:00 AM)"]
     )
     with tab_main:
         _top_movers_fragment(
+            pool=pool,
+            sector_lookup=sector_lookup,
             window_start="07:00",
             window_end="09:29",
             window_label="Window 7:00 – 9:29 AM ET",
-            empty_msg=("No tickers in the universe moved ≥ 20% between "
-                       "7:00 and 9:30 AM ET today."),
         )
     with tab_early:
         _top_movers_fragment(
+            pool=pool,
+            sector_lookup=sector_lookup,
             window_start="04:00",
             window_end="06:59",
             window_label="Window 4:00 – 6:59 AM ET",
-            empty_msg=("No tickers in the universe moved ≥ 20% between "
-                       "4:00 and 7:00 AM ET today."),
         )
 
 
