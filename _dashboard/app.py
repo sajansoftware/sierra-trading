@@ -528,8 +528,19 @@ def _close_dialog() -> None:
 
 @st.dialog("Catalysts", width="large")
 def catalyst_dialog(ticker: str) -> None:
+    # No price filter on the catalyst dialog — show every PM catalyst
+    # day regardless of where the stock traded that day. (The default
+    # $1-$20 cap on fetch_premarket_catalysts is for the LIVE screen,
+    # not historical research.) Threshold dropped to 20% so smaller
+    # but still notable moves surface.
     with st.spinner("Loading pre-market catalysts…"):
-        rows = fetch_premarket_catalysts(ticker)
+        rows = fetch_premarket_catalysts(
+            ticker,
+            min_price=0.01,
+            max_price=1_000_000.0,
+            min_upside_pct=20.0,
+            lookback_days=60,
+        )
 
     st.markdown(
         f"<div style='font-size:1.4rem;font-weight:700;color:{WHITE};"
@@ -541,7 +552,12 @@ def catalyst_dialog(ticker: str) -> None:
     )
 
     if not rows:
-        st.info("No pre-market catalyst days found for this ticker.")
+        st.info(
+            f"No pre-market catalyst days found for {ticker} in the "
+            f"last 60 days (PM upside ≥ 20%). Either the ticker had "
+            f"no notable pre-market moves, or yfinance returned no "
+            f"intraday data for it."
+        )
         if st.button("Close", key="close_empty"):
             _close_dialog()
             st.rerun()
