@@ -29,6 +29,7 @@ from data import (
     Quote,
     fetch_premarket_catalysts,
     fetch_top_movers,
+    fetch_top_movers_dual,
     filtered_by_category,
     short_blurb,
     tv_num,
@@ -1129,13 +1130,13 @@ def _render_movers_table(movers: list[dict],
 def _top_movers_fragment(
     pool: tuple[str, ...],
     sector_lookup: dict[str, tuple[str, str]],
-    window_start: str,
-    window_end: str,
+    which: str,                       # "main" or "early"
     window_label: str,
 ) -> None:
     """Self-refreshing fragment — re-runs every 2s without re-running
-    the entire page. The underlying yfinance call is @st.cache_data
-    cached at 15s, so the API isn't actually hit every 2s."""
+    the entire page. Calls fetch_top_movers_dual() so both tabs share
+    a single underlying scan (cached at 15s). Tab switching is
+    instant because the data already exists for both windows."""
     try:
         from zoneinfo import ZoneInfo
         now_et = datetime.now(ZoneInfo("America/New_York"))
@@ -1144,29 +1145,30 @@ def _top_movers_fragment(
     now_str = now_et.strftime("%H:%M:%S %Z") or now_et.strftime("%H:%M:%S")
 
     try:
-        movers = fetch_top_movers(
-            pool, window_start=window_start, window_end=window_end,
-        )
+        dual = fetch_top_movers_dual(pool)
+        movers = dual.get(which) or []
         scan_err = None
     except Exception as e:
         movers = []
         scan_err = f"{type(e).__name__}: {e}"
 
     is_weekend = now_et.weekday() >= 5
+    window_start = "07:00" if which == "main" else "04:00"
+    window_end = "09:29" if which == "main" else "06:59"
     in_main_pm = (7, 0) <= (now_et.hour, now_et.minute) < (9, 30)
     in_early_pm = (4, 0) <= (now_et.hour, now_et.minute) < (7, 0)
 
     diag_bits = [f"{window_label}", f"as of {now_str}"]
     if is_weekend:
         diag_bits.append("⚠ weekend — no fresh PM data today")
-    elif (window_start == "07:00" and now_et.hour < 7):
+    elif (which == "main" and now_et.hour < 7):
         diag_bits.append("ℹ market hasn't opened the main PM window yet")
-    elif (window_start == "04:00" and now_et.hour < 4):
+    elif (which == "early" and now_et.hour < 4):
         diag_bits.append("ℹ early PM hasn't started yet")
 
-    # Force-refresh button — clears the fetch_top_movers cache and
-    # forces a fresh yfinance pull. Useful when Streamlit Cloud has
-    # served a stale empty result or rate-limited the previous call.
+    # Force-refresh button — clears the dual-scan cache and re-pulls
+    # yfinance. Useful when Streamlit Cloud has served a stale empty
+    # result or rate-limited the previous call.
     info_col, btn_col = st.columns([10, 1])
     with info_col:
         st.markdown(
@@ -1175,16 +1177,16 @@ def _top_movers_fragment(
             f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
             f"margin-bottom:10px;'>Universe pool: {len(pool):,} tickers "
             f"&middot; movers found: {len(movers):,} &middot; "
-            f"auto-refresh every 2s (data cache 15s)</div>",
+            f"auto-refresh every 2s (data cache 15s, one scan covers both tabs)</div>",
             unsafe_allow_html=True,
         )
     with btn_col:
         if st.button(
-            "↻", key=f"force_refresh_{window_start}",
+            "↻", key=f"force_refresh_{which}",
             help="Force-refresh: clear cache and re-scan yfinance now",
             use_container_width=True,
         ):
-            fetch_top_movers.clear()
+            fetch_top_movers_dual.clear()
             st.rerun()
 
     if scan_err:
@@ -1248,16 +1250,14 @@ def render_top_movers() -> None:
         _top_movers_fragment(
             pool=pool,
             sector_lookup=sector_lookup,
-            window_start="07:00",
-            window_end="09:29",
+            which="main",
             window_label="Window 7:00 – 9:29 AM ET",
         )
     with tab_early:
         _top_movers_fragment(
             pool=pool,
             sector_lookup=sector_lookup,
-            window_start="04:00",
-            window_end="06:59",
+            which="early",
             window_label="Window 4:00 – 6:59 AM ET",
         )
 

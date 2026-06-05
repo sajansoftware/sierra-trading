@@ -258,6 +258,180 @@ def classify_catalyst(title: str) -> str:
     return "Press Release"
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def fetch_top_movers_dual(
+    universe_tickers: tuple[str, ...],
+    min_pct: float = 10.0,
+    min_price: float = 1.0,
+    max_price: float = 20.0,
+    max_float: int = 20_000_000,
+    max_rows: int = 100,
+) -> dict[str, list[dict]]:
+    """One scan, two slices — returns {"main": [...], "early": [...]}.
+
+    Pulls today's 5-minute intraday bars ONCE per ticker, then
+    computes both window results in a single pass. Saves yfinance
+    bandwidth and avoids the rate-limit thrash that happened when
+    each tab triggered its own scan.
+    """
+    nd_prices = nasdaq_price_map()
+    seeds: dict[str, Quote] = {}
+    for t in universe_tickers:
+        nd = nd_prices.get(t)
+        if nd is None:
+            continue
+        nd_price, nd_sector, nd_industry, nd_mc = nd
+        if not (min_price <= nd_price <= max_price):
+            continue
+        seeds[t] = Quote(
+            ticker=t, price=nd_price, previous_close=nd_price,
+            float_shares=None,
+            market_cap=int(nd_mc) if nd_mc else None,
+            sector=nd_sector, industry=nd_industry,
+            name=t, summary=None,
+        )
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
+    enriched: dict[str, Quote] = {}
+    for t, seed in seeds.items():
+        enriched[t] = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
+
+    def _passes(q: Quote) -> bool:
+        if not q.previous_close or q.previous_close <= 0:
+            return False
+        if not (min_price <= q.previous_close <= max_price):
+            return False
+        if q.float_shares is not None and q.float_shares > max_float:
+            return False
+        return True
+
+    eligible = [q for q in enriched.values() if _passes(q)]
+
+    try:
+        from zoneinfo import ZoneInfo
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        today_et = datetime.now().astimezone().date()
+
+    def _scan_one(q: Quote) -> tuple[dict | None, dict | None]:
+        """Return (main_row, early_row) for one ticker. One yfinance
+        call; both windows evaluated from the same bars."""
+        try:
+            hist = yf.Ticker(q.ticker).history(
+                period="1d", interval="5m", prepost=True, auto_adjust=True,
+            )
+            if hist is None or hist.empty:
+                return None, None
+            try:
+                hist.index = hist.index.tz_convert("America/New_York")
+            except Exception:
+                pass
+            day_bars = hist[hist.index.date == today_et]
+            if day_bars.empty:
+                return None, None
+        except Exception:
+            return None, None
+
+        def _compute(window_start: str, window_end: str) -> dict | None:
+            try:
+                pm = day_bars.between_time(window_start, window_end)
+            except Exception:
+                return None
+            if pm.empty:
+                return None
+            ref_price = float(pm.iloc[0].get("Open") or 0.0)
+            if ref_price <= 0:
+                return None
+            trigger = ref_price * (1.0 + min_pct / 100.0)
+            pm_high = float(pm["High"].max())
+            if pm_high < trigger:
+                return None
+            try:
+                pm_high_ts = pm["High"].idxmax()
+            except Exception:
+                return None
+            move_pct = (pm_high - ref_price) / ref_price * 100.0
+            try:
+                ref_time = pm.index[0].strftime("%H:%M ET")
+            except Exception:
+                ref_time = ""
+            try:
+                high_time = pm_high_ts.strftime("%H:%M ET")
+            except Exception:
+                high_time = ""
+            return {
+                "ticker":     q.ticker,
+                "name":       q.name or q.ticker,
+                "prev_close": q.previous_close,
+                "lod":        ref_price,
+                "hod":        pm_high,
+                "move_pct":   move_pct,
+                "float":      q.float_shares,
+                "ref_time":   ref_time,
+                "high_time":  high_time,
+            }
+
+        return (_compute("07:00", "09:29"),
+                _compute("04:00", "06:59"))
+
+    main_rows: list[dict] = []
+    early_rows: list[dict] = []
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        for main_r, early_r in pool.map(_scan_one, eligible):
+            if main_r:
+                main_rows.append(main_r)
+            if early_r:
+                early_rows.append(early_r)
+
+    # Sort each slice and enrich both with news (one news call per
+    # unique ticker across both slices).
+    main_rows.sort(key=lambda r: -r["move_pct"])
+    early_rows.sort(key=lambda r: -r["move_pct"])
+    main_rows = main_rows[:max_rows]
+    early_rows = early_rows[:max_rows]
+
+    try:
+        from news_sources import fetch_finviz_news, fetch_yahoo_rss
+        seen_news: dict[str, dict] = {}
+        for r in (main_rows + early_rows):
+            tkr = r["ticker"]
+            if tkr in seen_news:
+                cached = seen_news[tkr]
+                r["news_title"]  = cached["title"]
+                r["news_link"]   = cached["link"]
+                r["news_source"] = cached["source"]
+                r["news_type"]   = cached["type"]
+                continue
+            items = []
+            try: items.extend(fetch_finviz_news(tkr))
+            except Exception: pass
+            try: items.extend(fetch_yahoo_rss(tkr))
+            except Exception: pass
+            todays = [n for n in items if n["date"] == today_et]
+            best = todays[0] if todays else (items[0] if items else None)
+            if best:
+                payload = {
+                    "title":  best["title"],
+                    "link":   best["link"],
+                    "source": best["source"],
+                    "type":   classify_catalyst(best["title"]),
+                }
+            else:
+                payload = {"title": "", "link": "", "source": "—", "type": "—"}
+            seen_news[tkr] = payload
+            r["news_title"]  = payload["title"]
+            r["news_link"]   = payload["link"]
+            r["news_source"] = payload["source"]
+            r["news_type"]   = payload["type"]
+    except Exception:
+        for r in (main_rows + early_rows):
+            r.setdefault("news_title", "")
+            r.setdefault("news_link", "")
+            r.setdefault("news_source", "—")
+            r.setdefault("news_type", "—")
+
+    return {"main": main_rows, "early": early_rows}
+
+
 @st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
 def fetch_top_movers(
     universe_tickers: tuple[str, ...],
