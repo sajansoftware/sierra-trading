@@ -1017,8 +1017,11 @@ def _render_movers_table(movers: list[dict],
         f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Ticker","left"), ("Sector","left"), ("PM Low","right"),
-            ("PM High","right"), ("PM Move","right"), ("Type","left"),
+            ("Ticker","left"), ("Sector","left"),
+            ("Ref Price","right"),    # price at window-open (7:00 or 4:00)
+            ("PM High","right"),       # peak hit in window
+            ("Move","right"),          # gain from ref
+            ("Type","left"),
             ("Catalyst","left"), ("Source","center"),
         ]
     )
@@ -1054,7 +1057,7 @@ def _render_movers_table(movers: list[dict],
                 f"{source_label}</span>"
             )
         move = r["move_pct"]
-        move_color = GOOD if move >= 50 else (WARN if move >= 30 else ACCENT)
+        move_color = GOOD if move >= 100 else (WARN if move >= 75 else ACCENT)
 
         cls = sector_lookup.get(r["ticker"])
         if cls:
@@ -1069,6 +1072,19 @@ def _render_movers_table(movers: list[dict],
         else:
             sector_html = f"<span style='color:#64748b;'>—</span>"
 
+        ref_time = r.get("ref_time") or ""
+        high_time = r.get("high_time") or ""
+        ref_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['lod']:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{ref_time}</div>"
+               if ref_time else "")
+        )
+        high_cell = (
+            f"<div style='color:{WHITE};font-weight:600;'>${r['hod']:.2f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{high_time}</div>"
+               if high_time else "")
+        )
+
         body_rows.append(
             f"<tr>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
@@ -1076,9 +1092,9 @@ def _render_movers_table(movers: list[dict],
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"vertical-align:top;'>{sector_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};text-align:right;vertical-align:top;'>${r['lod']:.2f}</td>"
+            f"text-align:right;vertical-align:top;'>{ref_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};text-align:right;font-weight:600;vertical-align:top;'>${r['hod']:.2f}</td>"
+            f"text-align:right;vertical-align:top;'>{high_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"color:{move_color};text-align:right;font-weight:700;vertical-align:top;'>+{move:.1f}%</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
@@ -1195,9 +1211,11 @@ def render_top_movers() -> None:
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
           letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
         <div style="font-size:0.78rem;color:{WHITE_DIM};
-          margin-bottom:14px;">Criteria: PM move ≥50% &middot;
-          price $2–$20 &middot; float &lt; 20M. Tab assignment is
-          driven by the time-of-day the move occurred.</div>""",
+          margin-bottom:14px;">Criteria: price $2–$20 &middot; float
+          &lt; 20M. Logged when the stock rallies ≥50% from its
+          window-open price (7:00 AM for main, 4:00 AM for early).
+          A stock that meets the bar in both windows appears in
+          both tabs.</div>""",
         unsafe_allow_html=True,
     )
 

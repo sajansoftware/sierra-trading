@@ -274,15 +274,13 @@ def fetch_top_movers(
     A ticker qualifies when:
       - close between `min_price` and `max_price` (default $2-$20)
       - free float < `max_float` (default 20M)
-      - PM move (PM high vs PM low) >= `min_pct` (default 50%)
-        within the [window_start, window_end] ET window.
+      - The window's HIGH is at least (window-open * (1 + min_pct/100)).
+        i.e. the stock rallied ≥ min_pct from its opening price at
+        `window_start`. For the main tab that's the 7:00 AM price;
+        for the early tab it's the 4:00 AM price.
 
-    Default window is the "main" pre-market 7:00 - 9:29 AM ET when
-    most retail flow concentrates. Pass window_start="04:00",
-    window_end="06:59" for the "early" pre-market tab — a ticker
-    that ran in only the early window will surface there but not in
-    the main tab (and vice versa) because PM low/high are computed
-    over the time slice.
+    A ticker that rallied 50% in BOTH windows surfaces in BOTH tabs
+    (each tab computes its own reference from its own window-open).
     """
     # FAST path: build seeds from NASDAQ + Finviz, skip yfinance .info
     # (it 401s constantly). yfinance.history per eligible ticker below
@@ -346,30 +344,42 @@ def fetch_top_movers(
             pm_bars = day_bars.between_time(window_start, window_end)
             if pm_bars.empty:
                 return None
+            # Reference price = OPEN of the first bar in the window.
+            # For the main tab that's the 7:00 AM bar; for the early
+            # tab the 4:00 AM bar. yfinance 5-min bars are indexed by
+            # their start time, so iloc[0] is the bar at or just
+            # after window_start.
+            first_bar = pm_bars.iloc[0]
+            ref_price = float(first_bar.get("Open") or 0.0)
+            if ref_price <= 0:
+                return None
+            trigger_price = ref_price * (1.0 + min_pct / 100.0)
             pm_high = float(pm_bars["High"].max())
+            if pm_high < trigger_price:
+                return None
             try:
                 pm_high_ts = pm_bars["High"].idxmax()
             except Exception:
                 return None
-            # PM Low = lowest Low from 4:00 AM up to and including the
-            # PM-High bar. This is the pre-catalyst window, mirroring
-            # the catalyst-dialog logic.
-            pre_high = pm_bars[pm_bars.index <= pm_high_ts]
-            pm_low = float(pre_high["Low"].min())
-            if pm_low <= 0:
-                return None
-            # Per spec: (PM High - PM Low) / PM Low * 100
-            move_pct = (pm_high - pm_low) / pm_low * 100.0
-            if move_pct < min_pct:
-                return None
+            move_pct = (pm_high - ref_price) / ref_price * 100.0
+            try:
+                ref_time = pm_bars.index[0].strftime("%H:%M ET")
+            except Exception:
+                ref_time = ""
+            try:
+                high_time = pm_high_ts.strftime("%H:%M ET")
+            except Exception:
+                high_time = ""
             return {
                 "ticker":     q.ticker,
                 "name":       q.name or q.ticker,
                 "prev_close": q.previous_close,
-                "lod":        pm_low,
-                "hod":        pm_high,
-                "move_pct":   move_pct,
+                "lod":        ref_price,        # reference (window-open) price
+                "hod":        pm_high,          # actual peak in window
+                "move_pct":   move_pct,         # gain from ref
                 "float":      q.float_shares,
+                "ref_time":   ref_time,         # e.g. "07:00 ET"
+                "high_time":  high_time,
             }
         except Exception:
             return None
