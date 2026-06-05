@@ -1139,15 +1139,28 @@ def _top_movers_fragment(
     elif (window_start == "04:00" and now_et.hour < 4):
         diag_bits.append("ℹ early PM hasn't started yet")
 
-    st.markdown(
-        f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
-        f"margin-bottom:6px;'>{' &middot; '.join(diag_bits)}</div>"
-        f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
-        f"margin-bottom:10px;'>Universe pool: {len(pool):,} tickers "
-        f"&middot; movers found: {len(movers):,} &middot; "
-        f"auto-refresh every 2s (data cache 15s)</div>",
-        unsafe_allow_html=True,
-    )
+    # Force-refresh button — clears the fetch_top_movers cache and
+    # forces a fresh yfinance pull. Useful when Streamlit Cloud has
+    # served a stale empty result or rate-limited the previous call.
+    info_col, btn_col = st.columns([10, 1])
+    with info_col:
+        st.markdown(
+            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
+            f"margin-bottom:6px;'>{' &middot; '.join(diag_bits)}</div>"
+            f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
+            f"margin-bottom:10px;'>Universe pool: {len(pool):,} tickers "
+            f"&middot; movers found: {len(movers):,} &middot; "
+            f"auto-refresh every 2s (data cache 15s)</div>",
+            unsafe_allow_html=True,
+        )
+    with btn_col:
+        if st.button(
+            "↻", key=f"force_refresh_{window_start}",
+            help="Force-refresh: clear cache and re-scan yfinance now",
+            use_container_width=True,
+        ):
+            fetch_top_movers.clear()
+            st.rerun()
 
     if scan_err:
         st.error(f"Scan failed: {scan_err}")
