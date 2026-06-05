@@ -261,26 +261,26 @@ def classify_catalyst(title: str) -> str:
 @st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
 def fetch_top_movers(
     universe_tickers: tuple[str, ...],
-    min_pct: float = 50.0,
-    min_price: float = 2.0,
+    min_pct: float = 10.0,
+    min_price: float = 1.0,
     max_price: float = 20.0,
     max_float: int = 20_000_000,
-    max_rows: int = 40,
+    max_rows: int = 100,
     window_start: str = "07:00",
     window_end:   str = "09:29",
 ) -> list[dict]:
     """Today's biggest *pre-market* movers across the universe.
 
     A ticker qualifies when:
-      - close between `min_price` and `max_price` (default $2-$20)
+      - close between `min_price` and `max_price` (default $1-$20)
       - free float < `max_float` (default 20M)
       - The window's HIGH is at least (window-open * (1 + min_pct/100)).
-        i.e. the stock rallied ≥ min_pct from its opening price at
-        `window_start`. For the main tab that's the 7:00 AM price;
-        for the early tab it's the 4:00 AM price.
+        i.e. the stock rallied ≥ min_pct (default 10%) from its
+        opening price at `window_start`. For the main tab that's
+        the 7:00 AM price; for the early tab it's the 4:00 AM price.
 
-    A ticker that rallied 50% in BOTH windows surfaces in BOTH tabs
-    (each tab computes its own reference from its own window-open).
+    A ticker that pops in BOTH windows surfaces in BOTH tabs (each
+    tab computes its own reference from its own window-open).
     """
     # FAST path: build seeds from NASDAQ + Finviz, skip yfinance .info
     # (it 401s constantly). yfinance.history per eligible ticker below

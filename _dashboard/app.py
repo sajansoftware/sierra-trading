@@ -1057,7 +1057,16 @@ def _render_movers_table(movers: list[dict],
                 f"{source_label}</span>"
             )
         move = r["move_pct"]
-        move_color = GOOD if move >= 100 else (WARN if move >= 75 else ACCENT)
+        # Re-tiered for the 10% floor — most rows will be small moves.
+        # Bright green ≥100, green ≥50, yellow ≥25, accent base.
+        if move >= 100:
+            move_color = "#22c55e"
+        elif move >= 50:
+            move_color = GOOD
+        elif move >= 25:
+            move_color = WARN
+        else:
+            move_color = ACCENT
 
         cls = sector_lookup.get(r["ticker"])
         if cls:
@@ -1193,9 +1202,9 @@ def _top_movers_fragment(
         elif window_start == "04:00" and not in_early_pm and now_et.hour < 4:
             why = (" The 4:00–7:00 AM window is still in the future.")
         st.info(
-            f"No tickers met the criteria (≥50% move · $2–$20 · "
-            f"float <20M) between {window_start} and {window_end} "
-            f"ET today.{why}"
+            f"No tickers met the criteria (≥10% from window-open · "
+            f"$1–$20 · float <20M) between {window_start} and "
+            f"{window_end} ET today.{why}"
         )
         return
 
@@ -1211,11 +1220,11 @@ def render_top_movers() -> None:
         <div style="font-size:2rem;font-weight:700;color:{WHITE};
           letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
         <div style="font-size:0.78rem;color:{WHITE_DIM};
-          margin-bottom:14px;">Criteria: price $2–$20 &middot; float
-          &lt; 20M. Logged when the stock rallies ≥50% from its
-          window-open price (7:00 AM for main, 4:00 AM for early).
-          A stock that meets the bar in both windows appears in
-          both tabs.</div>""",
+          margin-bottom:14px;">Criteria: price $1–$20 &middot; float
+          &lt; 20M. Logged anytime within the window the stock is
+          up ≥10% from its window-open price (7:00 AM for main,
+          4:00 AM for early). A stock that pops in both windows
+          appears in both tabs.</div>""",
         unsafe_allow_html=True,
     )
 
