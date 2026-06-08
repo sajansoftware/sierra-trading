@@ -11,11 +11,14 @@ Output: list[dict] with keys
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Iterable
 
 import requests
 import streamlit as st
+
+_log = logging.getLogger("screener.classify")
 
 NASDAQ_URL = "https://api.nasdaq.com/api/screener/stocks"
 EXCHANGES = ("nasdaq", "nyse", "amex")
@@ -223,6 +226,10 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Containers/Packaging":                    (SECTOR_MATERIALS, "Construction_Materials"),
     "Building Materials":                      (SECTOR_MATERIALS, "Construction_Materials"),
     "Forest Products":                         (SECTOR_MATERIALS, "Construction_Materials"),
+    "Paper":                                   (SECTOR_MATERIALS, "Construction_Materials"),
+    "Paints/Coatings":                         (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Miscellaneous Chemical Manufacturing":    (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Agricultural Chemicals":                  (SECTOR_MATERIALS, "Specialty_Chemicals"),
     # ---------- Consumer Discretionary ----------
     "Apparel":                                 (SECTOR_CONSUMER_D, "Apparel_Footwear"),
     "Clothing/Shoe/Accessory Stores":          (SECTOR_CONSUMER_D, "Apparel_Footwear"),
@@ -238,11 +245,20 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "RETAIL: Building Materials":              (SECTOR_CONSUMER_D, "Home_Garden"),
     "Home Furnishings":                        (SECTOR_CONSUMER_D, "Home_Garden"),
     "Consumer Specialties":                    (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Diversified Retail":                      (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "General Merchandise Stores":              (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Shoe Manufacturing":                      (SECTOR_CONSUMER_D, "Apparel_Footwear"),
+    "Textiles":                                (SECTOR_CONSUMER_D, "Apparel_Footwear"),
+    "Consumer Electronics/Appliances":         (SECTOR_CONSUMER_D, "Home_Garden"),
+    "Consumer Electronics/Video Chains":       (SECTOR_CONSUMER_D, "Home_Garden"),
+    "Home Electronics & Appliances":           (SECTOR_CONSUMER_D, "Home_Garden"),
     "Recreational Products/Toys":              (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
     "Movies/Entertainment":                    (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
     "Services-Misc. Amusement & Recreation":   (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
+    "Sports & Recreation":                     (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
     "Other Consumer Services":                 (SECTOR_CONSUMER_D, "Travel_Leisure"),
-    "Air Freight/Delivery Services":           (SECTOR_CONSUMER_D, "Travel_Leisure"),
+    "Rental/Leasing Companies":                (SECTOR_CONSUMER_D, "Other"),
+    "Educational Services":                    (SECTOR_CONSUMER_D, "Other"),
     # ---------- Financials ----------
     "Major Banks":                             (SECTOR_FINANCIALS, "Regional_Banks"),
     "Banks":                                   (SECTOR_FINANCIALS, "Regional_Banks"),
@@ -257,7 +273,12 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Diversified Financial Services":          (SECTOR_FINANCIALS, "Specialty_Finance"),
     "Finance: Consumer Services":              (SECTOR_FINANCIALS, "Specialty_Finance"),
     "Finance Companies":                       (SECTOR_FINANCIALS, "Specialty_Finance"),
-    "Business Services":                       (SECTOR_FINANCIALS, "Fintech_Payments"),
+    "Blank Checks":                            (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Trusts Except Educational Religious and Charitable": (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Financial Conglomerates":                 (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Accident & Health Insurance":             (SECTOR_FINANCIALS, "Insurance"),
+    "Surety Organization":                     (SECTOR_FINANCIALS, "Insurance"),
+    "Business Services":                       (SECTOR_TECH, "IT_Services"),
     # ---------- Communication Services ----------
     "Telecommunications Equipment":            (SECTOR_COMMUNICATION, "Wireless_Wireline_Telecom"),
     "Radio And Television Broadcasting And Communications Equipment": (SECTOR_COMMUNICATION, "Media_Entertainment"),
@@ -266,6 +287,10 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Newspapers/Magazines":                    (SECTOR_COMMUNICATION, "Publishing_News"),
     "Books":                                   (SECTOR_COMMUNICATION, "Publishing_News"),
     "Advertising":                             (SECTOR_COMMUNICATION, "Advertising_MarTech"),
+    "Broadcasting":                            (SECTOR_COMMUNICATION, "Media_Entertainment"),
+    "Publishing":                              (SECTOR_COMMUNICATION, "Publishing_News"),
+    "Diversified/Integrated Telecommunication": (SECTOR_COMMUNICATION, "Wireless_Wireline_Telecom"),
+    "Wireless Communications":                 (SECTOR_COMMUNICATION, "Wireless_Wireline_Telecom"),
     "Multi-Sector Companies":                  (SECTOR_COMMUNICATION, "Media_Entertainment"),
     # ---------- Consumer Staples ----------
     "Packaged Foods":                          (SECTOR_STAPLES, "Food_Beverage"),
@@ -274,6 +299,7 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Meat/Poultry/Fish":                       (SECTOR_STAPLES, "Food_Beverage"),
     "Food Distributors":                       (SECTOR_STAPLES, "Grocery_Distribution"),
     "Food Chains":                             (SECTOR_STAPLES, "Grocery_Distribution"),
+    "Farming/Seeds/Milling":                   (SECTOR_STAPLES, "Food_Beverage"),
     "Consumer Non-Durables":                   (SECTOR_STAPLES, "Household_Products"),
     "Package Goods/Cosmetics":                 (SECTOR_STAPLES, "Personal_Care_Beauty"),
     "Tobacco":                                 (SECTOR_STAPLES, "Tobacco_Vape"),
@@ -281,12 +307,29 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Real Estate Investment Trusts":           (SECTOR_REALESTATE, "Diversified_REITs"),
     "Real Estate":                             (SECTOR_REALESTATE, "Proptech"),
     "Building operators":                      (SECTOR_REALESTATE, "Diversified_REITs"),
+    "Land Subdividers & Developers":           (SECTOR_REALESTATE, "Proptech"),
+    "Developers":                              (SECTOR_REALESTATE, "Proptech"),
     # ---------- Healthcare Services (non-biotech) ----------
     "Managed Health Care":                     (SECTOR_HCSVC, "Health_Insurance"),
     "Hospital/Nursing Management":             (SECTOR_HCSVC, "Hospitals_Health_Systems"),
     "Medical/Nursing Services":                (SECTOR_HCSVC, "Hospitals_Health_Systems"),
     "Health Care Distributors":                (SECTOR_HCSVC, "Pharmacy_Distributors"),
     "Misc Health and Biotechnology Services":  (SECTOR_HCSVC, "Healthcare_IT_Telehealth"),
+    # Biotech / pharma industries (also in HEALTHCARE_INDUSTRIES for biotech filter)
+    "Biotechnology: Biological Products (No Diagnostic Substances)":       (SECTOR_HCSVC, "Other"),
+    "Biotechnology: Commercial Physical & Biological Resarch":             (SECTOR_HCSVC, "Other"),
+    "Biotechnology: Electromedical & Electrotherapeutic Apparatus":        (SECTOR_HCSVC, "Medical_Devices"),
+    "Biotechnology: In Vitro & In Vivo Diagnostic Substances":             (SECTOR_HCSVC, "Other"),
+    "Biotechnology: Pharmaceutical Preparations":                          (SECTOR_HCSVC, "Other"),
+    "Biotechnology: Laboratory Analytical Instruments":                    (SECTOR_HCSVC, "Medical_Devices"),
+    "Medical Specialities":                    (SECTOR_HCSVC, "Medical_Devices"),
+    "Medical/Dental Instruments":              (SECTOR_HCSVC, "Medical_Devices"),
+    "Medical Electronics":                     (SECTOR_HCSVC, "Medical_Devices"),
+    "Ophthalmic Goods":                        (SECTOR_HCSVC, "Dental_Vision_Hearing"),
+    "Other Pharmaceuticals":                   (SECTOR_HCSVC, "Pharmacy_Distributors"),
+    "Pharmaceuticals and Biotechnology":       (SECTOR_HCSVC, "Other"),
+    "Medicinal Chemicals and Botanical Products": (SECTOR_HCSVC, "Other"),
+    "Precision Instruments":                   (SECTOR_HCSVC, "Medical_Devices"),
     # ---------- Technology ----------
     "EDP Services":                            (SECTOR_TECH, "IT_Services"),
     "Computer Software: Prepackaged Software": (SECTOR_TECH, "Software_SaaS"),
@@ -295,13 +338,27 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Computer Manufacturing":                  (SECTOR_TECH, "Consumer_Electronics"),
     "Computer Communications Equipment":       (SECTOR_TECH, "Cloud_Infrastructure"),
     "Computer peripheral equipment":           (SECTOR_TECH, "Consumer_Electronics"),
+    "Internet Software/Services":              (SECTOR_TECH, "Software_SaaS"),
+    "Computer Integrated Systems Design":      (SECTOR_TECH, "IT_Services"),
+    "Information Technology Services":         (SECTOR_TECH, "IT_Services"),
+    "Data Processing Services":                (SECTOR_TECH, "IT_Services"),
+    "Retail: Computer Software & Peripheral Equipment": (SECTOR_TECH, "Consumer_Electronics"),
+    "Electronic/Photographic Dealers":         (SECTOR_TECH, "Consumer_Electronics"),
+    "Photographic Equipment & Supplies":       (SECTOR_TECH, "Consumer_Electronics"),
     "Semiconductors":                          (SECTOR_TECH, "Semiconductors"),
     "Electronic Components":                   (SECTOR_TECH, "Semiconductors"),
+    "Industrial Measurement Instruments":      (SECTOR_TECH, "Semiconductors"),
+    "Printed Circuit Boards":                  (SECTOR_TECH, "Semiconductors"),
+    "Electronic Coils/Transformers":           (SECTOR_TECH, "Semiconductors"),
     # ---------- Energy ----------
     "Oil & Gas Production":                    (SECTOR_ENERGY, "Exploration_Production"),
     "Integrated oil Companies":                (SECTOR_ENERGY, "Exploration_Production"),
     "Oilfield Services/Equipment":             (SECTOR_ENERGY, "Oilfield_Services_Equipment"),
     "Oil Refining/Marketing":                  (SECTOR_ENERGY, "Midstream"),
+    "Oil/Gas Transmission":                    (SECTOR_ENERGY, "Midstream"),
+    "Natural Gas Pipeline":                    (SECTOR_ENERGY, "Midstream"),
+    "Crude Petroleum & Natural Gas":           (SECTOR_ENERGY, "Exploration_Production"),
+    "Drilling Oil & Gas Wells":                (SECTOR_ENERGY, "Oilfield_Services_Equipment"),
     "Natural Gas Distribution":                (SECTOR_UTILITIES, "Gas_Utilities"),
     "Coal Mining":                             (SECTOR_ENERGY, "Coal_Uranium"),
     "Industrial Machinery/Components":         (SECTOR_INDUSTRIAL, "Machinery"),
@@ -317,19 +374,111 @@ INDUSTRY_TO_SECTOR_SUB: dict[str, tuple[str, str]] = {
     "Pollution Control Equipment":             (SECTOR_INDUSTRIAL, "Industrial_Services"),
     "Electrical Products":                     (SECTOR_INDUSTRIAL, "Electrical_Equipment"),
     "Metal Fabrications":                      (SECTOR_INDUSTRIAL, "Machinery"),
+    "General Industrial Machinery & Equipment": (SECTOR_INDUSTRIAL, "Machinery"),
+    "Special Industry Machinery":              (SECTOR_INDUSTRIAL, "Machinery"),
     "Environmental Services":                  (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Professional Services":                   (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Security & Protection Services":          (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Wholesale Distributors":                  (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Office/Plant Supplies/Maintenance":       (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Miscellaneous Manufacturing Industries":  (SECTOR_INDUSTRIAL, "Other"),
+    "Ordnance And Accessories":                (SECTOR_INDUSTRIAL, "Aerospace_Defense"),
+    "Package/Freight Delivery":                (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Homebuilding":                            (SECTOR_INDUSTRIAL, "Construction_Engineering"),
+    "General Building Contractors":            (SECTOR_INDUSTRIAL, "Construction_Engineering"),
+    "Heavy Construction":                      (SECTOR_INDUSTRIAL, "Construction_Engineering"),
     # ---------- Utilities ----------
     "Water Supply":                            (SECTOR_UTILITIES, "Water_Utilities"),
     "Power Generation":                        (SECTOR_UTILITIES, "Electric_Utilities"),
     "Electric Utilities: Central":             (SECTOR_UTILITIES, "Electric_Utilities"),
     "Electric Utilities":                      (SECTOR_UTILITIES, "Electric_Utilities"),
+    "Cogeneration":                            (SECTOR_UTILITIES, "Electric_Utilities"),
+    "Sewage & Water Treatment":                (SECTOR_UTILITIES, "Water_Utilities"),
+    # --- Casing variants and NASDAQ typos (discovered via live audit) ---
+    "Accident &Health Insurance":              (SECTOR_FINANCIALS, "Insurance"),
+    "Auto & Home Supply Stores":               (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Building Products":                       (SECTOR_MATERIALS, "Construction_Materials"),
+    "Computer Software: Programming Data Processing": (SECTOR_TECH, "Software_SaaS"),
+    "Diversified Electronic Products":         (SECTOR_TECH, "Consumer_Electronics"),
+    "Durable Goods":                           (SECTOR_CONSUMER_D, "Home_Garden"),
+    "Electronics Distribution":                (SECTOR_TECH, "Consumer_Electronics"),
+    "Fluid Controls":                          (SECTOR_INDUSTRIAL, "Machinery"),
+    "Garments and Clothing":                   (SECTOR_CONSUMER_D, "Apparel_Footwear"),
+    "General Bldg Contractors - Nonresidential Bldgs": (SECTOR_INDUSTRIAL, "Construction_Engineering"),
+    "Integrated Freight & Logistics":          (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Misc Corporate Leasing Services":         (SECTOR_FINANCIALS, "Specialty_Finance"),
+    "Miscellaneous":                           (SECTOR_INDUSTRIAL, "Other"),
+    "Miscellaneous manufacturing industries":  (SECTOR_INDUSTRIAL, "Other"),
+    "Office Equipment/Supplies/Services":      (SECTOR_INDUSTRIAL, "Industrial_Services"),
+    "Oil and Gas Field Machinery":             (SECTOR_ENERGY, "Oilfield_Services_Equipment"),
+    "Other Metals and Minerals":               (SECTOR_MATERIALS, "Base_Metals"),
+    "Other Transportation":                    (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Plastic Products":                        (SECTOR_MATERIALS, "Specialty_Chemicals"),
+    "Professional and commerical equipment":   (SECTOR_INDUSTRIAL, "Machinery"),
+    "Recreational Games/Products/Toys":        (SECTOR_CONSUMER_D, "Gaming_Entertainment"),
+    "Retail-Auto Dealers and Gas Stations":    (SECTOR_CONSUMER_D, "Retail_Specialty"),
+    "Retail-Drug Stores and Proprietary Stores": (SECTOR_HCSVC, "Pharmacy_Distributors"),
+    "Tools/Hardware":                          (SECTOR_INDUSTRIAL, "Machinery"),
+    "Transportation Services":                 (SECTOR_INDUSTRIAL, "Transportation_Logistics"),
+    "Water Sewer Pipeline Comm & Power Line Construction": (SECTOR_INDUSTRIAL, "Construction_Engineering"),
 }
 
-# Keywords that nudge a ticker into Crypto-Adjacent sub-sector of Financials
+# ---------------------------------------------------------------------------
+# Cross-sector keyword patterns
+# ---------------------------------------------------------------------------
+# These run after the initial industry-based classification and can override
+# the sector/sub-sector when the company name reveals a better fit.
+
 _CRYPTO_KEYWORDS = re.compile(
     r"\b(bitcoin|crypto|blockchain|digital asset|web3|mining (?:rig|hardware))\b",
     re.IGNORECASE,
 )
+
+_FINTECH_KEYWORDS = re.compile(
+    r"\b(fintech|payment[s]?|neobank|digital bank|mobile bank"
+    r"|lending platform|peer.to.peer|p2p lend|buy.now.pay.later|bnpl"
+    r"|remittance|money transfer|digital wallet|e.wallet"
+    r"|payment processing|merchant services"
+    r"|insurtech|regtech|wealthtech|robo.advisor)\b",
+    re.IGNORECASE,
+)
+
+_EV_KEYWORDS = re.compile(
+    r"\b(electric vehicle|ev chargi|ev battery|lithium.ion"
+    r"|solid.state battery|charging station|charging network"
+    r"|ev infrastructure|battery technology)\b",
+    re.IGNORECASE,
+)
+
+_CANNABIS_KEYWORDS = re.compile(
+    r"\b(cannabis|marijuana|hemp|cbd|thc|dispensar"
+    r"|cultivation facility|grow facility)\b",
+    re.IGNORECASE,
+)
+
+_SPACE_KEYWORDS = re.compile(
+    r"\b(satellite|orbital|launch vehicle|spacecraft"
+    r"|rocket|lunar|space tourism"
+    r"|low.earth orbit|leo constellation)\b",
+    re.IGNORECASE,
+)
+
+_QUANTUM_KEYWORDS = re.compile(
+    r"\b(quantum comput|quantum encrypt|quantum key"
+    r"|quantum network|qubit|quantum sensor)\b",
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
+# Diagnostic tracking for unmapped industries
+# ---------------------------------------------------------------------------
+_UNMAPPED_SEEN: set[str] = set()
+
+
+def _unmapped_industries() -> set[str]:
+    """Return NASDAQ industry strings seen at runtime with no
+    INDUSTRY_TO_SECTOR_SUB entry. Useful for iterative improvement."""
+    return set(_UNMAPPED_SEEN)
 
 
 ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
@@ -361,15 +510,53 @@ ND_SECTOR_TO_DASHBOARD: dict[str, str] = {
 # Format: {TICKER: (sector_key, sub_sector_folder)}
 # Sub-sector folders must match keys in app.py SECTORS dict.
 MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
-    # SOBR Safe — alcohol-detection wearables, not a newspaper.
-    "SOBR": ("Health Care", "Medical_Devices"),
-    # AXIL Brands — hearing enhancement / protection products,
+    # SOBR Safe -- alcohol-detection wearables, not a newspaper.
+    "SOBR": (SECTOR_HCSVC, "Medical_Devices"),
+    # AXIL Brands -- hearing enhancement / protection products,
     # not personal-care / beauty.
-    "AXIL": ("Health Care", "Dental_Vision_Hearing"),
-    # Bonk Inc — digital-infrastructure / crypto company,
+    "AXIL": (SECTOR_HCSVC, "Dental_Vision_Hearing"),
+    # Bonk Inc -- digital-infrastructure / crypto company,
     # not personal-care / beauty.
-    "BNKK": ("Financials", "Crypto_Adjacent"),
+    "BNKK": (SECTOR_FINANCIALS, "Crypto_Adjacent"),
 }
+
+
+def _apply_keyword_overrides(
+    sector: str, sub: str, name: str,
+) -> tuple[str, str]:
+    """Post-classification keyword overrides for cross-sector ambiguities.
+
+    Applied after INDUSTRY_TO_SECTOR_SUB or ND_SECTOR_TO_DASHBOARD has
+    produced a (sector, sub) pair. Keyword rules can reclassify the
+    sub-sector (or even the sector) based on the company name.
+    Rules are ordered by priority -- first match wins.
+    """
+    # Crypto: any sector -> Financials/Crypto_Adjacent
+    if _CRYPTO_KEYWORDS.search(name):
+        return SECTOR_FINANCIALS, "Crypto_Adjacent"
+
+    # Fintech: Tech or Industrial companies that are actually fintech
+    if sector in (SECTOR_TECH, SECTOR_INDUSTRIAL) and _FINTECH_KEYWORDS.search(name):
+        return SECTOR_FINANCIALS, "Fintech_Payments"
+
+    # EV: tech or industrial companies doing EV infrastructure
+    if sector in (SECTOR_TECH, SECTOR_INDUSTRIAL) and _EV_KEYWORDS.search(name):
+        return SECTOR_CONSUMER_D, "Automotive_EVs"
+
+    # Cannabis: can appear under various NASDAQ sectors
+    if _CANNABIS_KEYWORDS.search(name):
+        return SECTOR_HCSVC, "Other"
+
+    # Space/satellite: often tagged as tech or industrial
+    if sector in (SECTOR_TECH, SECTOR_INDUSTRIAL, SECTOR_COMMUNICATION):
+        if _SPACE_KEYWORDS.search(name):
+            return SECTOR_COMMUNICATION, "Satellite_Towers"
+
+    # Quantum computing
+    if _QUANTUM_KEYWORDS.search(name):
+        return SECTOR_TECH, "AI_Machine_Learning"
+
+    return sector, sub
 
 
 def keyword_classify(row: dict) -> tuple[str, str] | None:
@@ -385,13 +572,13 @@ def keyword_classify(row: dict) -> tuple[str, str] | None:
     mapped = INDUSTRY_TO_SECTOR_SUB.get(industry)
     if mapped is not None:
         sector, sub = mapped
-        if sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
-            sub = "Crypto_Adjacent"
-        return sector, sub
+        return _apply_keyword_overrides(sector, sub, name)
+    # Track unmapped industries for diagnostic purposes
+    if industry:
+        _UNMAPPED_SEEN.add(industry)
+        _log.debug("Unmapped NASDAQ industry: %r (sector=%r)", industry, sector_str)
     fallback_sector = ND_SECTOR_TO_DASHBOARD.get(sector_str) or SECTOR_INDUSTRIAL
-    if fallback_sector == SECTOR_FINANCIALS and _CRYPTO_KEYWORDS.search(name):
-        return SECTOR_FINANCIALS, "Crypto_Adjacent"
-    return fallback_sector, "Other"
+    return _apply_keyword_overrides(fallback_sector, "Other", name)
 
 
 def classify_ticker_sector(row: dict) -> tuple[str, str] | None:
