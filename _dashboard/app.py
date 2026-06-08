@@ -11,6 +11,9 @@ Architecture:
 
 from __future__ import annotations
 
+import base64
+import math
+import struct
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -1126,6 +1129,28 @@ def _render_movers_table(movers: list[dict],
     )
 
 
+@st.cache_resource
+def _ping_sound_b64() -> str:
+    """Generate a short alert ping as a base64-encoded WAV string."""
+    sr, dur, freq = 22050, 0.12, 880
+    n = int(sr * dur)
+    samples = []
+    for i in range(n):
+        t = i / sr
+        env = math.exp(-t * 25)
+        val = env * math.sin(2 * math.pi * freq * t)
+        samples.append(int(val * 32767 * 0.4))
+    data_sz = n * 2
+    hdr = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + data_sz, b"WAVE",
+        b"fmt ", 16, 1, 1, sr, sr * 2, 2, 16,
+        b"data", data_sz,
+    )
+    raw = hdr + struct.pack(f"<{n}h", *samples)
+    return base64.b64encode(raw).decode()
+
+
 @st.fragment(run_every="2s")
 def _top_movers_fragment(
     pool: tuple[str, ...],
@@ -1151,6 +1176,21 @@ def _top_movers_fragment(
     except Exception as e:
         movers = []
         scan_err = f"{type(e).__name__}: {e}"
+
+    # -- Detect newly-appeared movers and play an alert ping --
+    _cur_syms = {m.symbol for m in movers}
+    _seen_key = f"seen_movers_{which}"
+    _prev = st.session_state.get(_seen_key)
+    if _prev is not None and st.session_state.get("enable_mover_sound", True):
+        if _cur_syms - _prev:
+            import streamlit.components.v1 as _comp
+            _comp.html(
+                '<audio autoplay src="data:audio/wav;base64,'
+                + _ping_sound_b64()
+                + '"></audio>',
+                height=0,
+            )
+    st.session_state[_seen_key] = _cur_syms
 
     is_weekend = now_et.weekday() >= 5
     window_start = "07:00" if which == "main" else "04:00"
@@ -1214,21 +1254,28 @@ def _top_movers_fragment(
 
 
 def render_top_movers() -> None:
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
-        <div style="font-size:0.78rem;color:{WHITE_DIM};
-          margin-bottom:14px;">Criteria: price $1–$20 &middot; float
-          &lt; 20M. Logged anytime within the window the stock is
-          up ≥10% from its window-open price (7:00 AM for main,
-          4:00 AM for early). A stock that pops in both windows
-          appears in both tabs.</div>""",
-        unsafe_allow_html=True,
-    )
+    _title_col, _sound_col = st.columns([20, 1])
+    with _title_col:
+        st.markdown(
+            f"""<div style="margin-bottom:8px;">
+              <span style="font-size:0.75rem;color:{WHITE_MUTE};
+                text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
+            </div>
+            <div style="font-size:2rem;font-weight:700;color:{WHITE};
+              letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
+            <div style="font-size:0.78rem;color:{WHITE_DIM};
+              margin-bottom:14px;">Criteria: price $1–$20 &middot; float
+              &lt; 20M. Logged anytime within the window the stock is
+              up ≥10% from its window-open price (7:00 AM for main,
+              4:00 AM for early). A stock that pops in both windows
+              appears in both tabs.</div>""",
+            unsafe_allow_html=True,
+        )
+    with _sound_col:
+        st.toggle(
+            "\U0001f514", value=True, key="enable_mover_sound",
+            help="Toggle new-mover alert sound",
+        )
 
     # Build the pool + sector lookup ONCE at page render — both are
     # cheap and don't need to re-run on the per-fragment tick.
