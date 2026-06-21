@@ -282,7 +282,7 @@ def fetch_top_movers_dual(
         nd = nd_prices.get(t)
         if nd is None:
             continue
-        nd_price, nd_sector, nd_industry, nd_mc = nd
+        nd_price, nd_sector, nd_industry, nd_mc, nd_country = nd
         if not (min_price <= nd_price <= max_price):
             continue
         seeds[t] = Quote(
@@ -290,7 +290,7 @@ def fetch_top_movers_dual(
             float_shares=None,
             market_cap=int(nd_mc) if nd_mc else None,
             sector=nd_sector, industry=nd_industry,
-            name=t, summary=None,
+            name=t, summary=None, country=nd_country,
         )
     fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
     enriched: dict[str, Quote] = {}
@@ -456,7 +456,7 @@ def fetch_penny_movers(
     nd_prices = nasdaq_price_map()
     seeds: dict[str, Quote] = {}
     for t, nd in nd_prices.items():
-        nd_price, nd_sector, nd_industry, nd_mc = nd
+        nd_price, nd_sector, nd_industry, nd_mc, nd_country = nd
         if not (0.001 <= nd_price <= 0.999):
             continue
         seeds[t] = Quote(
@@ -464,7 +464,7 @@ def fetch_penny_movers(
             float_shares=None,
             market_cap=int(nd_mc) if nd_mc else None,
             sector=nd_sector, industry=nd_industry,
-            name=t, summary=None,
+            name=t, summary=None, country=nd_country,
         )
     if not seeds:
         return []
@@ -621,7 +621,7 @@ def fetch_top_movers(
         nd = nd_prices.get(t)
         if nd is None:
             continue
-        nd_price, nd_sector, nd_industry, nd_mc = nd
+        nd_price, nd_sector, nd_industry, nd_mc, nd_country = nd
         # Honor the function args, not the module-level MIN/MAX_PRICE.
         if not (min_price <= nd_price <= max_price):
             continue
@@ -630,7 +630,7 @@ def fetch_top_movers(
             float_shares=None,
             market_cap=int(nd_mc) if nd_mc else None,
             sector=nd_sector, industry=nd_industry,
-            name=t, summary=None,
+            name=t, summary=None, country=nd_country,
         )
     fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
     enriched_quotes: dict[str, Quote] = {}
@@ -1175,8 +1175,8 @@ def fetch_quotes(tickers: tuple[str, ...]) -> dict[str, Quote]:
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
-def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None]]:
-    """ticker -> (last_price, sector, industry, market_cap).
+def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None, str]]:
+    """ticker -> (last_price, sector, industry, market_cap, country).
 
     Sourced from the cached NASDAQ screener (24h cache). Used as
     fallback data when yfinance .info 401s on the .info endpoint.
@@ -1186,7 +1186,7 @@ def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None]]:
         raw = fetch_nasdaq_universe()
     except Exception:
         return {}
-    out: dict[str, tuple[float, str, str, float | None]] = {}
+    out: dict[str, tuple[float, str, str, float | None, str]] = {}
     for r in raw:
         sym = (r.get("symbol") or "").strip().upper()
         if not sym:
@@ -1200,6 +1200,7 @@ def nasdaq_price_map() -> dict[str, tuple[float, str, str, float | None]]:
             (r.get("sector") or "").strip(),
             (r.get("industry") or "").strip(),
             mc,
+            (r.get("country") or "").strip(),
         )
     return out
 
@@ -1357,7 +1358,7 @@ def _filtered_by_category_impl(
         nd = nd_prices.get(t)
         if nd is None:
             continue
-        nd_price, nd_sector, nd_industry, nd_mc = nd
+        nd_price, nd_sector, nd_industry, nd_mc, nd_country = nd
         if not (MIN_PRICE <= nd_price <= MAX_PRICE):
             continue
         seeds[t] = Quote(
@@ -1370,6 +1371,7 @@ def _filtered_by_category_impl(
             industry=nd_industry,
             name=t,
             summary=None,
+            country=nd_country,
         )
 
     fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys()))) if seeds else {}
