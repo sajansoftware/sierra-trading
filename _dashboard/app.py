@@ -30,6 +30,7 @@ from data import (
     MAX_PRICE,
     MIN_PRICE,
     Quote,
+    fetch_penny_movers,
     fetch_premarket_catalysts,
     fetch_top_movers,
     fetch_top_movers_dual,
@@ -54,6 +55,7 @@ import utilities_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 import mia as mia_module
+import stan as stan_module
 import tradervue
 
 ROOT = Path(__file__).parent
@@ -406,6 +408,7 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
             "Close":       q.close,
             "Float":       q.float_shares,
             "Mkt Cap":     q.market_cap,
+            "Country":     q.country or "",
             "Description": company,
         })
     return pd.DataFrame(out)
@@ -440,6 +443,7 @@ def style_table(df: pd.DataFrame):
         "Close":   lambda v: f"${v:.2f}" if pd.notna(v) else "—",
         "Float":   tv_num,
         "Mkt Cap": tv_num,
+        "Country": lambda v: v if v else "—",
     }, escape=None)
     s = s.map(_float_bg, subset=["Float"])
     s = s.map(_price_color, subset=["Close"])
@@ -448,6 +452,10 @@ def style_table(df: pd.DataFrame):
     })
     s = s.set_properties(**{"text-align": "right", "color": WHITE_DIM})
     s = s.set_properties(subset=["Ticker"], **{"text-align": "left"})
+    s = s.set_properties(subset=["Country"], **{
+        "text-align": "left", "color": WHITE_DIM,
+        "font-size": "0.85rem",
+    })
     s = s.set_properties(subset=["Description"], **{
         "text-align": "left", "color": WHITE_MUTE,
         "font-size": "0.85rem", "max-width": "440px",
@@ -460,7 +468,8 @@ def style_table(df: pd.DataFrame):
                   f"border-bottom:1px solid {BORDER}; font-size:0.78rem; "
                   "text-transform:uppercase; letter-spacing:0.5px;"},
         {"selector": "th.col_heading.level0:nth-child(1), "
-                     "th.col_heading.level0:nth-child(5)",
+                     "th.col_heading.level0:nth-child(5), "
+                     "th.col_heading.level0:nth-child(6)",
          "props": "text-align:left;"},
         {"selector": "td",
          "props": f"padding:9px 14px; font-size:0.9rem; "
@@ -1178,7 +1187,7 @@ def _top_movers_fragment(
         scan_err = f"{type(e).__name__}: {e}"
 
     # -- Detect newly-appeared movers and play an alert ping --
-    _cur_syms = {m.symbol for m in movers}
+    _cur_syms = {m["ticker"] for m in movers}
     _seen_key = f"seen_movers_{which}"
     _prev = st.session_state.get(_seen_key)
     if _prev is not None and st.session_state.get("enable_mover_sound", True):
@@ -1253,6 +1262,194 @@ def _top_movers_fragment(
     _render_movers_table(movers, sector_lookup, empty_msg="")
 
 
+def _render_penny_table(movers: list[dict],
+                        sector_lookup: dict[str, tuple[str, str]],
+                        empty_msg: str) -> None:
+    """Like _render_movers_table but includes an RVOL column."""
+    if not movers:
+        st.info(empty_msg)
+        return
+
+    def _human_sub_label(sec: str, sub_key: str) -> str:
+        try:
+            return SECTORS[sec][sub_key][0]
+        except Exception:
+            return sub_key.replace("_", " ")
+
+    head_cells = "".join(
+        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Ticker","left"), ("Sector","left"),
+            ("Ref Price","right"), ("PM High","right"),
+            ("Move","right"), ("RVOL","right"),
+            ("Type","left"), ("Catalyst","left"), ("Source","center"),
+        ]
+    )
+
+    body_rows = []
+    for r in movers:
+        ticker_html = (
+            f"<a href='?ticker={r['ticker']}' target='_self' "
+            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
+            f"border-bottom:1px dotted {ACCENT};'>{r['ticker']}</a>"
+        )
+        type_label = r.get("news_type") or "—"
+        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
+        type_badge = (
+            f"<span style='background:{type_col};color:#06121e;"
+            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
+            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
+        )
+        catalyst_text = (
+            r.get("news_title") or ""
+        ) or f"<span style='color:#64748b;'>—</span>"
+        source_label = r.get("news_source") or "—"
+        if r.get("news_link") and source_label != "—":
+            source_html = (
+                f"<a href='{r['news_link']}' target='_blank' "
+                f"style='color:{ACCENT};text-decoration:none;"
+                f"font-size:0.78rem;white-space:nowrap;'>{source_label} ↗</a>"
+            )
+        else:
+            source_html = (
+                f"<span style='color:#64748b;font-size:0.78rem;'>"
+                f"{source_label}</span>"
+            )
+        move = r["move_pct"]
+        if move >= 100:
+            move_color = "#22c55e"
+        elif move >= 50:
+            move_color = GOOD
+        elif move >= 25:
+            move_color = WARN
+        else:
+            move_color = ACCENT
+
+        rvol = r.get("rvol") or 0.0
+        rvol_str = f"{rvol:.1f}x"
+        rvol_color = GOOD if rvol >= 10 else (WARN if rvol >= 5 else ACCENT)
+
+        cls = sector_lookup.get(r["ticker"])
+        if cls:
+            sec, sub = cls
+            sub_label = _human_sub_label(sec, sub)
+            sector_html = (
+                f"<div style='color:{WHITE};font-size:0.82rem;"
+                f"font-weight:600;line-height:1.25;'>{sec}</div>"
+                f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
+                f"line-height:1.25;'>{sub_label}</div>"
+            )
+        else:
+            sector_html = f"<span style='color:#64748b;'>—</span>"
+
+        ref_time = r.get("ref_time") or ""
+        high_time = r.get("high_time") or ""
+        ref_cell = (
+            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['lod']:.4f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{ref_time}</div>"
+               if ref_time else "")
+        )
+        high_cell = (
+            f"<div style='color:{WHITE};font-weight:600;'>${r['hod']:.4f}</div>"
+            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{high_time}</div>"
+               if high_time else "")
+        )
+
+        body_rows.append(
+            f"<tr>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{ticker_html}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{sector_html}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{ref_cell}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:right;vertical-align:top;'>{high_cell}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{move_color};text-align:right;font-weight:700;vertical-align:top;'>+{move:.1f}%</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{rvol_color};text-align:right;font-weight:600;vertical-align:top;'>{rvol_str}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{type_badge}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;"
+            f"vertical-align:top;'>{catalyst_text}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"text-align:center;vertical-align:top;'>{source_html}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"""<table class='sierra-table'>
+          <thead><tr>{head_cells}</tr></thead>
+          <tbody>{''.join(body_rows)}</tbody>
+        </table>""",
+        unsafe_allow_html=True,
+    )
+
+
+@st.fragment(run_every="2s")
+def _penny_movers_fragment(
+    sector_lookup: dict[str, tuple[str, str]],
+) -> None:
+    """Self-refreshing fragment for the penny watchlist tab."""
+    try:
+        from zoneinfo import ZoneInfo
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+    except Exception:
+        now_et = datetime.utcnow()
+    now_str = now_et.strftime("%H:%M:%S %Z") or now_et.strftime("%H:%M:%S")
+
+    try:
+        movers = fetch_penny_movers()
+        scan_err = None
+    except Exception as e:
+        movers = []
+        scan_err = f"{type(e).__name__}: {e}"
+
+    is_weekend = now_et.weekday() >= 5
+
+    diag_bits = ["Penny Watchlist (sub-$1)", f"as of {now_str}"]
+    if is_weekend:
+        diag_bits.append("weekend — no fresh PM data today")
+
+    info_col, btn_col = st.columns([10, 1])
+    with info_col:
+        st.markdown(
+            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
+            f"margin-bottom:6px;'>{' &middot; '.join(diag_bits)}</div>"
+            f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
+            f"margin-bottom:10px;'>Criteria: price $0.001–$0.999 &middot; "
+            f"float &lt; 20M &middot; move ≥30% &middot; RVOL ≥5x "
+            f"&middot; movers found: {len(movers):,}</div>",
+            unsafe_allow_html=True,
+        )
+    with btn_col:
+        if st.button(
+            "↻", key="force_refresh_penny",
+            help="Force-refresh: clear cache and re-scan",
+            use_container_width=True,
+        ):
+            fetch_penny_movers.clear()
+            st.rerun()
+
+    if scan_err:
+        st.error(f"Scan failed: {scan_err}")
+        return
+
+    if not movers:
+        st.info(
+            "No sub-$1 tickers met the criteria (≥30% from window-open · "
+            "float <20M · RVOL ≥5x) during the 4:00–9:29 AM ET window today."
+        )
+        return
+
+    _render_penny_table(movers, sector_lookup, empty_msg="")
+
+
 def render_top_movers() -> None:
     _title_col, _sound_col = st.columns([20, 1])
     with _title_col:
@@ -1268,7 +1465,8 @@ def render_top_movers() -> None:
               &lt; 20M. Logged anytime within the window the stock is
               up ≥10% from its window-open price (7:00 AM for main,
               4:00 AM for early). A stock that pops in both windows
-              appears in both tabs.</div>""",
+              appears in both tabs. The Penny tab tracks sub-$1 stocks
+              with ≥30% moves and ≥5x RVOL.</div>""",
             unsafe_allow_html=True,
         )
     with _sound_col:
@@ -1289,9 +1487,10 @@ def render_top_movers() -> None:
         )
         return
 
-    tab_main, tab_early = st.tabs(
+    tab_main, tab_early, tab_penny = st.tabs(
         ["Main pre-market (7:00 – 9:30 AM)",
-         "Early pre-market (4:00 – 7:00 AM)"]
+         "Early pre-market (4:00 – 7:00 AM)",
+         "Penny Watchlist (sub-$1)"]
     )
     with tab_main:
         _top_movers_fragment(
@@ -1306,6 +1505,10 @@ def render_top_movers() -> None:
             sector_lookup=sector_lookup,
             which="early",
             window_label="Window 4:00 – 6:59 AM ET",
+        )
+    with tab_penny:
+        _penny_movers_fragment(
+            sector_lookup=sector_lookup,
         )
 
 
@@ -1330,11 +1533,10 @@ def render_operations() -> None:
         unsafe_allow_html=True,
     )
 
-    # Sub-button row — currently one tab; structured so more can be
-    # added later (Risk audit, Journal recon, etc.).
+    # Sub-button row
     if "op_view" not in st.session_state:
         st.session_state.op_view = "categorization"
-    sb1, _ = st.columns([2, 10])
+    sb1, sb2, _ = st.columns([2, 2, 8])
     with sb1:
         if st.button(
             "Categorization",
@@ -1344,11 +1546,22 @@ def render_operations() -> None:
         ):
             st.session_state.op_view = "categorization"
             st.rerun()
+    with sb2:
+        if st.button(
+            "Unmapped Industries",
+            key="op_unmapped_btn",
+            type="primary" if st.session_state.op_view == "unmapped" else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.op_view = "unmapped"
+            st.rerun()
 
     st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
     if st.session_state.op_view == "categorization":
         _render_categorization_log()
+    elif st.session_state.op_view == "unmapped":
+        _render_unmapped_industries()
 
 
 def _render_categorization_log() -> None:
@@ -1452,6 +1665,110 @@ def _render_categorization_log() -> None:
         f"<table class='sierra-table'>"
         f"<thead><tr>{head_cells}</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_unmapped_industries() -> None:
+    """Show NASDAQ industry strings that have no INDUSTRY_TO_SECTOR_SUB entry."""
+    try:
+        from screener import (
+            fetch_nasdaq_universe, classify_ticker_sector,
+            _unmapped_industries, _parse_price,
+        )
+    except Exception:
+        st.error("Screener module unavailable.")
+        return
+
+    st.markdown(
+        f"""<div style="font-size:0.85rem;color:{WHITE_DIM};
+          margin-bottom:14px;max-width:760px;line-height:1.55;">
+          <b>Unmapped Industries:</b> NASDAQ industry strings that have
+          no explicit entry in <code>INDUSTRY_TO_SECTOR_SUB</code>.
+          These tickers fall through to the NASDAQ-sector fallback
+          and land in the "Other" sub-folder. Adding a mapping gives
+          them a precise sub-sector assignment.
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Scanning NASDAQ universe for unmapped industries…"):
+        raw = fetch_nasdaq_universe()
+        # Run classify on every ticker to populate _UNMAPPED_SEEN
+        for r in raw:
+            sym = (r.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            p = _parse_price(r.get("lastsale"))
+            if p is None or not (MIN_PRICE <= p <= MAX_PRICE):
+                continue
+            classify_ticker_sector(r)
+
+        unmapped = _unmapped_industries()
+
+    if not unmapped:
+        st.success(
+            "All NASDAQ industry strings are mapped. No unmapped "
+            "industries found in the $1–$20 universe."
+        )
+        return
+
+    # Count tickers per unmapped industry
+    industry_tickers: dict[str, list[str]] = {}
+    for r in raw:
+        ind = (r.get("industry") or "").strip()
+        if ind not in unmapped:
+            continue
+        sym = (r.get("symbol") or "").strip().upper()
+        p = _parse_price(r.get("lastsale"))
+        if not sym or p is None or not (MIN_PRICE <= p <= MAX_PRICE):
+            continue
+        industry_tickers.setdefault(ind, []).append(sym)
+
+    sorted_industries = sorted(
+        industry_tickers.items(),
+        key=lambda x: -len(x[1]),
+    )
+
+    st.markdown(
+        f"<div style='font-size:0.95rem;font-weight:600;color:{WHITE};"
+        f"margin-bottom:8px;'>{len(sorted_industries)} unmapped "
+        f"industry strings</div>",
+        unsafe_allow_html=True,
+    )
+
+    head_cells = "".join(
+        f"<th style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
+        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
+        f"text-align:{align};'>{h}</th>"
+        for h, align in [
+            ("Industry", "left"),
+            ("Tickers", "right"),
+            ("Samples", "left"),
+        ]
+    )
+
+    body_rows = []
+    for ind, tickers in sorted_industries:
+        samples = ", ".join(tickers[:8])
+        if len(tickers) > 8:
+            samples += f" … (+{len(tickers) - 8})"
+        body_rows.append(
+            f"<tr>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE};font-weight:500;'>{ind}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{ACCENT};text-align:right;font-weight:600;'>{len(tickers)}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
+            f"color:{WHITE_MUTE};font-size:0.78rem;max-width:420px;'>{samples}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"<table class='sierra-table'>"
+        f"<thead><tr>{head_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>",
         unsafe_allow_html=True,
     )
 
@@ -1632,6 +1949,132 @@ def render_mia_coach() -> None:
     _render_bucket("By Day of Week",   analysis["by_dow"],       "Day")
     _render_bucket("By Direction",     analysis["by_direction"], "Direction")
     _render_bucket("By Ticker (top 20)", analysis["by_ticker"][:20], "Ticker")
+
+
+# =============================================================================
+# Stan — Research AI Employee (market theme scanner)
+# =============================================================================
+_THEME_COLORS = ["#64b5f6", "#22c55e", "#facc15", "#f97316", "#a78bfa"]
+
+
+def render_stan_research() -> None:
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Stan / Research</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:6px;">Market Themes</div>
+        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
+          Stan scans the universe for emerging themes by clustering today's
+          catalysts and sector momentum. Each theme card shows the catalyst
+          type, supporting tickers, and top headlines.</div>""",
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Stan is scanning for market themes…"):
+        pool = _top_movers_pool()
+        sector_lookup = _build_movers_sector_lookup()
+        research = stan_module.compile_research(pool, sector_lookup)
+
+    themes = research.get("themes") or []
+    sector_perf = research.get("sector_perf") or []
+    gen_at = research.get("generated_at")
+    scanned = research.get("tickers_scanned", 0)
+
+    ts_str = gen_at.strftime("%H:%M:%S") if gen_at else "—"
+    st.markdown(
+        f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
+        f"margin-bottom:14px;'>Generated at {ts_str} &middot; "
+        f"{scanned:,} tickers in universe</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Sector performance bar
+    if sector_perf:
+        perf_items = []
+        for sp in sorted(sector_perf, key=lambda x: -x.get("change_pct", 0)):
+            chg = sp.get("change_pct", 0)
+            color = GOOD if chg > 0 else (DANGER if chg < 0 else WHITE_MUTE)
+            sign = "+" if chg > 0 else ""
+            perf_items.append(
+                f"<span style='margin-right:16px;white-space:nowrap;'>"
+                f"<span style='color:{WHITE_DIM};font-size:0.78rem;'>"
+                f"{sp.get('sector', '')}</span> "
+                f"<span style='color:{color};font-weight:600;"
+                f"font-size:0.78rem;'>{sign}{chg:.1f}%</span></span>"
+            )
+        st.markdown(
+            f"<div style='background:{NAVY_CARD};border:1px solid {BORDER};"
+            f"border-radius:6px;padding:10px 14px;margin-bottom:18px;"
+            f"overflow-x:auto;white-space:nowrap;'>"
+            f"<div style='font-size:0.65rem;color:{WHITE_MUTE};"
+            f"text-transform:uppercase;letter-spacing:1px;"
+            f"margin-bottom:6px;'>Sector Performance</div>"
+            f"{''.join(perf_items)}</div>",
+            unsafe_allow_html=True,
+        )
+
+    if not themes:
+        st.info(
+            "No strong themes detected right now. Stan needs active "
+            "market hours with catalysts firing across multiple tickers "
+            "in the same sector to cluster a theme. Check back during "
+            "pre-market or the trading session."
+        )
+        return
+
+    # Theme cards
+    for i, theme in enumerate(themes):
+        color = _THEME_COLORS[i % len(_THEME_COLORS)]
+        ticker_links = " ".join(
+            f"<a href='?ticker={t}' target='_self' "
+            f"style='color:{ACCENT};text-decoration:none;"
+            f"font-weight:600;font-size:0.82rem;"
+            f"border-bottom:1px dotted {ACCENT};margin-right:8px;'>{t}</a>"
+            for t in theme.tickers
+        )
+        headlines_html = ""
+        if theme.headlines:
+            items = "".join(
+                f"<li style='color:{WHITE_DIM};font-size:0.78rem;"
+                f"margin-bottom:3px;'>{h}</li>"
+                for h in theme.headlines[:4]
+            )
+            headlines_html = (
+                f"<ul style='margin:8px 0 0;padding-left:18px;'>"
+                f"{items}</ul>"
+            )
+
+        catalyst_badge = (
+            f"<span style='background:{CATALYST_TYPE_COLOR.get(theme.catalyst_type, WHITE_MUTE)};"
+            f"color:#06121e;font-weight:700;font-size:0.68rem;"
+            f"padding:2px 8px;border-radius:4px;margin-left:10px;'>"
+            f"{theme.catalyst_type}</span>"
+        )
+
+        st.markdown(
+            f"""<div style='border-left:4px solid {color};
+              background:{NAVY_CARD};border:1px solid {BORDER};
+              border-left:4px solid {color};border-radius:8px;
+              padding:14px 18px;margin-bottom:12px;'>
+              <div style='display:flex;justify-content:space-between;
+                align-items:center;margin-bottom:6px;'>
+                <span style='font-size:1.05rem;font-weight:700;
+                  color:{WHITE};'>#{theme.rank} {theme.name}</span>
+                {catalyst_badge}
+              </div>
+              <div style='color:{WHITE_DIM};font-size:0.85rem;
+                margin-bottom:8px;'>{theme.description}</div>
+              <div style='margin-bottom:4px;'>
+                <span style='font-size:0.68rem;color:{WHITE_MUTE};
+                  text-transform:uppercase;letter-spacing:0.5px;'>
+                  Tickers:</span> {ticker_links}
+              </div>
+              {headlines_html}
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
 
 # =============================================================================
@@ -2472,6 +2915,15 @@ def main() -> None:
                 st.session_state.view = "operations"
                 st.rerun()
 
+            if st.button(
+                "🔬 Stan (Research)",
+                use_container_width=True,
+                key="stan_btn",
+                type="primary" if st.session_state.view == "stan" else "secondary",
+            ):
+                st.session_state.view = "stan"
+                st.rerun()
+
         # ---------- AI classifier status (silent background worker) ----------
         try:
             from gemini_classifier import stats as _gem_stats
@@ -2504,6 +2956,10 @@ def main() -> None:
 
     if st.session_state.view in ("operations", "aidan"):
         render_operations()
+        return
+
+    if st.session_state.view == "stan":
+        render_stan_research()
         return
 
     if st.session_state.view == "ipo":

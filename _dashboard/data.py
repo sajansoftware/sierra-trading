@@ -37,6 +37,7 @@ class Quote:
     name: str | None = None          # company short/long name from yfinance
     summary: str | None = None       # longBusinessSummary from yfinance
     error: str | None = None
+    country: str | None = None       # country of domicile from yfinance
 
     @property
     def close(self) -> float | None:
@@ -111,6 +112,7 @@ def _fetch_one(ticker: str) -> Quote:
             industry=info.get("industry"),
             name=info.get("shortName") or info.get("longName"),
             summary=info.get("longBusinessSummary"),
+            country=info.get("country"),
         )
     except Exception as exc:
         return Quote(ticker, None, None, None, None, None, None, error=str(exc)[:120])
@@ -430,6 +432,160 @@ def fetch_top_movers_dual(
             r.setdefault("news_type", "—")
 
     return {"main": main_rows, "early": early_rows}
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def fetch_penny_movers(
+    max_rows: int = 100,
+    min_move_pct: float = 30.0,
+    min_rvol: float = 5.0,
+    max_float: int = 20_000_000,
+) -> list[dict]:
+    """Today's sub-$1 penny stock movers — high RVOL, big PM moves.
+
+    Seeds from the full NASDAQ universe filtered to $0.001–$0.999,
+    enriches with Finviz float data, then scans yfinance 5-min
+    intraday bars for the full pre-market window (4:00–9:29 AM ET).
+
+    Criteria:
+      - Price $0.001–$0.999 (sub-$1 penny stocks)
+      - Float < 20M (when known)
+      - Move ≥ 30% from window-open price
+      - RVOL ≥ 5.0 (today's volume / average volume)
+    """
+    nd_prices = nasdaq_price_map()
+    seeds: dict[str, Quote] = {}
+    for t, nd in nd_prices.items():
+        nd_price, nd_sector, nd_industry, nd_mc = nd
+        if not (0.001 <= nd_price <= 0.999):
+            continue
+        seeds[t] = Quote(
+            ticker=t, price=nd_price, previous_close=nd_price,
+            float_shares=None,
+            market_cap=int(nd_mc) if nd_mc else None,
+            sector=nd_sector, industry=nd_industry,
+            name=t, summary=None,
+        )
+    if not seeds:
+        return []
+
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys())))
+    enriched: dict[str, Quote] = {}
+    for t, seed in seeds.items():
+        enriched[t] = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), None)
+
+    def _passes(q: Quote) -> bool:
+        if not q.previous_close or q.previous_close <= 0:
+            return False
+        if not (0.001 <= q.previous_close <= 0.999):
+            return False
+        if q.float_shares is not None and q.float_shares > max_float:
+            return False
+        return True
+
+    eligible = [q for q in enriched.values() if _passes(q)]
+
+    try:
+        from zoneinfo import ZoneInfo
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        today_et = datetime.now().astimezone().date()
+
+    def _scan_one(q: Quote) -> dict | None:
+        try:
+            t_obj = yf.Ticker(q.ticker)
+            hist = t_obj.history(
+                period="1d", interval="5m", prepost=True, auto_adjust=True,
+            )
+            if hist is None or hist.empty:
+                return None
+            try:
+                hist.index = hist.index.tz_convert("America/New_York")
+            except Exception:
+                pass
+            day_bars = hist[hist.index.date == today_et]
+            if day_bars.empty:
+                return None
+            pm = day_bars.between_time("04:00", "09:29")
+            if pm.empty:
+                return None
+            ref_price = float(pm.iloc[0].get("Open") or 0.0)
+            if ref_price <= 0:
+                return None
+            trigger = ref_price * (1.0 + min_move_pct / 100.0)
+            pm_high = float(pm["High"].max())
+            if pm_high < trigger:
+                return None
+            move_pct = (pm_high - ref_price) / ref_price * 100.0
+            # RVOL: today's volume / average volume
+            try:
+                avg_vol = t_obj.info.get("averageVolume") or 0
+            except Exception:
+                avg_vol = 0
+            today_vol = float(day_bars["Volume"].sum()) if "Volume" in day_bars else 0
+            rvol = (today_vol / avg_vol) if avg_vol > 0 else 0.0
+            if rvol < min_rvol:
+                return None
+            try:
+                pm_high_ts = pm["High"].idxmax()
+                high_time = pm_high_ts.strftime("%H:%M ET")
+            except Exception:
+                high_time = ""
+            try:
+                ref_time = pm.index[0].strftime("%H:%M ET")
+            except Exception:
+                ref_time = ""
+            return {
+                "ticker":     q.ticker,
+                "name":       q.name or q.ticker,
+                "prev_close": q.previous_close,
+                "lod":        ref_price,
+                "hod":        pm_high,
+                "move_pct":   move_pct,
+                "float":      q.float_shares,
+                "ref_time":   ref_time,
+                "high_time":  high_time,
+                "rvol":       rvol,
+            }
+        except Exception:
+            return None
+
+    rows: list[dict] = []
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        for r in pool.map(_scan_one, eligible):
+            if r:
+                rows.append(r)
+
+    # News enrichment
+    try:
+        from news_sources import fetch_finviz_news, fetch_yahoo_rss
+        for r in rows:
+            news_items = []
+            try: news_items.extend(fetch_finviz_news(r["ticker"]))
+            except Exception: pass
+            try: news_items.extend(fetch_yahoo_rss(r["ticker"]))
+            except Exception: pass
+            todays = [n for n in news_items if n["date"] == today_et]
+            best = todays[0] if todays else (news_items[0] if news_items else None)
+            if best:
+                r["news_title"]  = best["title"]
+                r["news_link"]   = best["link"]
+                r["news_source"] = best["source"]
+                r["news_type"]   = classify_catalyst(best["title"])
+            else:
+                r["news_title"]  = ""
+                r["news_link"]   = ""
+                r["news_source"] = "—"
+                r["news_type"]   = "—"
+    except Exception:
+        for r in rows:
+            r.setdefault("news_title", "")
+            r.setdefault("news_link", "")
+            r.setdefault("news_source", "—")
+            r.setdefault("news_type", "—")
+
+    rows.sort(key=lambda r: -r["move_pct"])
+    return rows[:max_rows]
 
 
 @st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
