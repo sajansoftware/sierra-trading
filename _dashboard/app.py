@@ -1463,8 +1463,7 @@ def render_top_movers() -> None:
               &lt; 20M. Logged anytime within the window the stock is
               up ≥10% from its window-open price (7:00 AM for main,
               4:00 AM for early). A stock that pops in both windows
-              appears in both tabs. The Penny tab tracks sub-$1 stocks
-              with ≥30% moves and ≥5x RVOL.</div>""",
+              appears in both tabs.</div>""",
             unsafe_allow_html=True,
         )
     with _sound_col:
@@ -1485,10 +1484,9 @@ def render_top_movers() -> None:
         )
         return
 
-    tab_main, tab_early, tab_penny = st.tabs(
+    tab_main, tab_early = st.tabs(
         ["Main pre-market (7:00 – 9:30 AM)",
-         "Early pre-market (4:00 – 7:00 AM)",
-         "Penny Watchlist (sub-$1)"]
+         "Early pre-market (4:00 – 7:00 AM)"]
     )
     with tab_main:
         _top_movers_fragment(
@@ -1504,12 +1502,37 @@ def render_top_movers() -> None:
             which="early",
             window_label="Window 4:00 – 6:59 AM ET",
         )
-    with tab_penny:
-        _penny_movers_fragment(
-            sector_lookup=sector_lookup,
+
+
+# =============================================================================
+# Penny Watchlist — standalone view (sub-$1 universe)
+# =============================================================================
+
+def render_penny_watchlist() -> None:
+    _title_col, _sound_col = st.columns([20, 1])
+    with _title_col:
+        st.markdown(
+            f"""<div style="margin-bottom:8px;">
+              <span style="font-size:0.75rem;color:{WHITE_MUTE};
+                text-transform:uppercase;letter-spacing:1px;">Penny Watchlist</span>
+            </div>
+            <div style="font-size:2rem;font-weight:700;color:{WHITE};
+              letter-spacing:-0.5px;margin-bottom:4px;">Penny Watchlist</div>
+            <div style="font-size:0.78rem;color:{WHITE_DIM};
+              margin-bottom:14px;">Criteria: price sub-$1 &middot; ≥30% move
+              &middot; ≥5x RVOL &middot; float &lt; 20M.</div>""",
+            unsafe_allow_html=True,
+        )
+    with _sound_col:
+        st.toggle(
+            "\U0001f514", value=True, key="enable_mover_sound",
+            help="Toggle new-mover alert sound",
         )
 
+    with st.spinner("Loading universe…"):
+        sector_lookup = _build_movers_sector_lookup()
 
+    _penny_movers_fragment(sector_lookup=sector_lookup)
 
 
 # =============================================================================
@@ -2330,6 +2353,15 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
+                "💰 Penny Watchlist",
+                use_container_width=True,
+                key="penny_btn",
+                type="primary" if st.session_state.view == "penny" else "secondary",
+            ):
+                st.session_state.view = "penny"
+                st.rerun()
+
+            if st.button(
                 "📅 IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
@@ -2381,6 +2413,10 @@ def main() -> None:
 
     if st.session_state.view == "movers":
         render_top_movers()
+        return
+
+    if st.session_state.view == "penny":
+        render_penny_watchlist()
         return
 
     if st.session_state.view == "stan":
