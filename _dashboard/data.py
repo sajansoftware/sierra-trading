@@ -435,7 +435,7 @@ def fetch_top_movers_dual(
     return {"main": main_rows, "early": early_rows}
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_penny_movers(
     max_rows: int = 100,
     min_move_pct: float = 30.0,
@@ -590,7 +590,7 @@ def fetch_penny_movers(
     return rows[:max_rows]
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_penny_candidates(
     max_float: int = 20_000_000,
 ) -> list[Quote]:
@@ -653,7 +653,7 @@ def fetch_penny_candidates(
     return rows
 
 
-@st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_top_movers(
     universe_tickers: tuple[str, ...],
     min_pct: float = 10.0,
@@ -1374,7 +1374,7 @@ def _enrich_with_fallbacks(
                       summary=summary)
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def _filtered_by_category_cached(
     universe_tuple: tuple[tuple[str, tuple[str, ...]], ...],
     ticker_tuple: tuple[str, ...],
