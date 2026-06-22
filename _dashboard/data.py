@@ -260,7 +260,7 @@ def classify_catalyst(title: str) -> str:
     return "Press Release"
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_top_movers_dual(
     universe_tickers: tuple[str, ...],
     min_pct: float = 10.0,

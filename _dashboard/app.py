@@ -1166,16 +1166,16 @@ def _ping_sound_b64() -> str:
     return base64.b64encode(raw).decode()
 
 
-@st.fragment(run_every="2s")
+@st.fragment(run_every="30s")
 def _top_movers_fragment(
     pool: tuple[str, ...],
     sector_lookup: dict[str, tuple[str, str]],
     which: str,                       # "main" or "early"
     window_label: str,
 ) -> None:
-    """Self-refreshing fragment — re-runs every 2s without re-running
+    """Self-refreshing fragment — re-runs every 30s without re-running
     the entire page. Calls fetch_top_movers_dual() so both tabs share
-    a single underlying scan (cached at 15s). Tab switching is
+    a single underlying scan (cached at 5min). Tab switching is
     instant because the data already exists for both windows."""
     _refresh_key = f"_pending_refresh_{which}"
     _data_key = f"_movers_data_{which}"
@@ -1243,7 +1243,7 @@ def _top_movers_fragment(
             f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
             f"margin-bottom:10px;'>Universe pool: {len(pool):,} tickers "
             f"&middot; movers found: {len(movers):,} &middot; "
-            f"auto-refresh every 2s (data cache 15s, one scan covers both tabs)</div>",
+            f"auto-refresh every 30s (data cache 5min, one scan covers both tabs)</div>",
             unsafe_allow_html=True,
         )
     with btn_col:
