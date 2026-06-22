@@ -30,7 +30,7 @@ from data import (
     MAX_PRICE,
     MIN_PRICE,
     Quote,
-    fetch_penny_movers,
+    fetch_penny_candidates,
     fetch_premarket_catalysts,
     fetch_top_movers,
     fetch_top_movers_dual,
@@ -1028,7 +1028,7 @@ def _render_movers_table(movers: list[dict],
         f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
         f"text-align:{align};'>{h}</th>"
         for h, align in [
-            ("Ticker","left"), ("Sector","left"),
+            ("Ticker","left"), ("Sector","left"), ("Country","left"),
             ("Ref Price","right"),    # price at window-open (7:00 or 4:00)
             ("PM High","right"),       # peak hit in window
             ("Move","right"),          # gain from ref
@@ -1092,6 +1092,12 @@ def _render_movers_table(movers: list[dict],
         else:
             sector_html = f"<span style='color:#64748b;'>—</span>"
 
+        country_val = r.get("country") or "—"
+        country_html = (
+            f"<span style='color:{WHITE_DIM};font-size:0.82rem;'>"
+            f"{country_val}</span>"
+        )
+
         ref_time = r.get("ref_time") or ""
         high_time = r.get("high_time") or ""
         ref_cell = (
@@ -1111,6 +1117,8 @@ def _render_movers_table(movers: list[dict],
             f"vertical-align:top;'>{ticker_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"vertical-align:top;'>{sector_html}</td>"
+            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
+            f"vertical-align:top;'>{country_html}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
             f"text-align:right;vertical-align:top;'>{ref_cell}</td>"
             f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
@@ -1169,6 +1177,15 @@ def _top_movers_fragment(
     the entire page. Calls fetch_top_movers_dual() so both tabs share
     a single underlying scan (cached at 15s). Tab switching is
     instant because the data already exists for both windows."""
+    _refresh_key = f"_pending_refresh_{which}"
+    _data_key = f"_movers_data_{which}"
+    _err_key = f"_movers_err_{which}"
+
+    # Apply pending cache clear from a previous button click BEFORE
+    # the data fetch so the fresh scan runs in the same execution.
+    if st.session_state.pop(_refresh_key, False):
+        fetch_top_movers_dual.clear()
+
     try:
         from zoneinfo import ZoneInfo
         now_et = datetime.now(ZoneInfo("America/New_York"))
@@ -1180,9 +1197,14 @@ def _top_movers_fragment(
         dual = fetch_top_movers_dual(pool)
         movers = dual.get(which) or []
         scan_err = None
+        # Persist last successful result so the table never goes blank.
+        st.session_state[_data_key] = movers
+        st.session_state.pop(_err_key, None)
     except Exception as e:
-        movers = []
         scan_err = f"{type(e).__name__}: {e}"
+        st.session_state[_err_key] = scan_err
+        # Fall back to last known good data.
+        movers = st.session_state.get(_data_key, [])
 
     # -- Detect newly-appeared movers and play an alert ping --
     _cur_syms = {m["ticker"] for m in movers}
@@ -1207,15 +1229,12 @@ def _top_movers_fragment(
 
     diag_bits = [f"{window_label}", f"as of {now_str}"]
     if is_weekend:
-        diag_bits.append("⚠ weekend — no fresh PM data today")
+        diag_bits.append("weekend — no fresh PM data today")
     elif (which == "main" and now_et.hour < 7):
-        diag_bits.append("ℹ market hasn't opened the main PM window yet")
+        diag_bits.append("market hasn't opened the main PM window yet")
     elif (which == "early" and now_et.hour < 4):
-        diag_bits.append("ℹ early PM hasn't started yet")
+        diag_bits.append("early PM hasn't started yet")
 
-    # Force-refresh button — clears the dual-scan cache and re-pulls
-    # yfinance. Useful when Streamlit Cloud has served a stale empty
-    # result or rate-limited the previous call.
     info_col, btn_col = st.columns([10, 1])
     with info_col:
         st.markdown(
@@ -1233,12 +1252,12 @@ def _top_movers_fragment(
             help="Force-refresh: clear cache and re-scan yfinance now",
             use_container_width=True,
         ):
-            fetch_top_movers_dual.clear()
-            st.rerun()
+            st.session_state[_refresh_key] = True
 
     if scan_err:
         st.error(f"Scan failed: {scan_err}")
-        return
+        if not movers:
+            return
 
     if not movers:
         why = ""
@@ -1258,194 +1277,6 @@ def _top_movers_fragment(
         return
 
     _render_movers_table(movers, sector_lookup, empty_msg="")
-
-
-def _render_penny_table(movers: list[dict],
-                        sector_lookup: dict[str, tuple[str, str]],
-                        empty_msg: str) -> None:
-    """Like _render_movers_table but includes an RVOL column."""
-    if not movers:
-        st.info(empty_msg)
-        return
-
-    def _human_sub_label(sec: str, sub_key: str) -> str:
-        try:
-            return SECTORS[sec][sub_key][0]
-        except Exception:
-            return sub_key.replace("_", " ")
-
-    head_cells = "".join(
-        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Ticker","left"), ("Sector","left"),
-            ("Ref Price","right"), ("PM High","right"),
-            ("Move","right"), ("RVOL","right"),
-            ("Type","left"), ("Catalyst","left"), ("Source","center"),
-        ]
-    )
-
-    body_rows = []
-    for r in movers:
-        ticker_html = (
-            f"<a href='?ticker={r['ticker']}' target='_self' "
-            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
-            f"border-bottom:1px dotted {ACCENT};'>{r['ticker']}</a>"
-        )
-        type_label = r.get("news_type") or "—"
-        type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
-        )
-        catalyst_text = (
-            r.get("news_title") or ""
-        ) or f"<span style='color:#64748b;'>—</span>"
-        source_label = r.get("news_source") or "—"
-        if r.get("news_link") and source_label != "—":
-            source_html = (
-                f"<a href='{r['news_link']}' target='_blank' "
-                f"style='color:{ACCENT};text-decoration:none;"
-                f"font-size:0.78rem;white-space:nowrap;'>{source_label} ↗</a>"
-            )
-        else:
-            source_html = (
-                f"<span style='color:#64748b;font-size:0.78rem;'>"
-                f"{source_label}</span>"
-            )
-        move = r["move_pct"]
-        if move >= 100:
-            move_color = "#22c55e"
-        elif move >= 50:
-            move_color = GOOD
-        elif move >= 25:
-            move_color = WARN
-        else:
-            move_color = ACCENT
-
-        rvol = r.get("rvol") or 0.0
-        rvol_str = f"{rvol:.1f}x"
-        rvol_color = GOOD if rvol >= 10 else (WARN if rvol >= 5 else ACCENT)
-
-        cls = sector_lookup.get(r["ticker"])
-        if cls:
-            sec, sub = cls
-            sub_label = _human_sub_label(sec, sub)
-            sector_html = (
-                f"<div style='color:{WHITE};font-size:0.82rem;"
-                f"font-weight:600;line-height:1.25;'>{sec}</div>"
-                f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
-                f"line-height:1.25;'>{sub_label}</div>"
-            )
-        else:
-            sector_html = f"<span style='color:#64748b;'>—</span>"
-
-        ref_time = r.get("ref_time") or ""
-        high_time = r.get("high_time") or ""
-        ref_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['lod']:.4f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{ref_time}</div>"
-               if ref_time else "")
-        )
-        high_cell = (
-            f"<div style='color:{WHITE};font-weight:600;'>${r['hod']:.4f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{high_time}</div>"
-               if high_time else "")
-        )
-
-        body_rows.append(
-            f"<tr>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{ticker_html}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{sector_html}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{ref_cell}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{high_cell}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{move_color};text-align:right;font-weight:700;vertical-align:top;'>+{move:.1f}%</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{rvol_color};text-align:right;font-weight:600;vertical-align:top;'>{rvol_str}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;"
-            f"vertical-align:top;'>{catalyst_text}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;vertical-align:top;'>{source_html}</td>"
-            f"</tr>"
-        )
-
-    st.markdown(
-        f"""<table class='sierra-table'>
-          <thead><tr>{head_cells}</tr></thead>
-          <tbody>{''.join(body_rows)}</tbody>
-        </table>""",
-        unsafe_allow_html=True,
-    )
-
-
-@st.fragment(run_every="2s")
-def _penny_movers_fragment(
-    sector_lookup: dict[str, tuple[str, str]],
-) -> None:
-    """Self-refreshing fragment for the penny watchlist tab."""
-    try:
-        from zoneinfo import ZoneInfo
-        now_et = datetime.now(ZoneInfo("America/New_York"))
-    except Exception:
-        now_et = datetime.utcnow()
-    now_str = now_et.strftime("%H:%M:%S %Z") or now_et.strftime("%H:%M:%S")
-
-    try:
-        movers = fetch_penny_movers()
-        scan_err = None
-    except Exception as e:
-        movers = []
-        scan_err = f"{type(e).__name__}: {e}"
-
-    is_weekend = now_et.weekday() >= 5
-
-    diag_bits = ["Penny Watchlist (sub-$1)", f"as of {now_str}"]
-    if is_weekend:
-        diag_bits.append("weekend — no fresh PM data today")
-
-    info_col, btn_col = st.columns([10, 1])
-    with info_col:
-        st.markdown(
-            f"<div style='font-size:0.72rem;color:{WHITE_MUTE};"
-            f"margin-bottom:6px;'>{' &middot; '.join(diag_bits)}</div>"
-            f"<div style='font-size:0.7rem;color:{WHITE_MUTE};"
-            f"margin-bottom:10px;'>Criteria: price $0.001–$0.999 &middot; "
-            f"float &lt; 20M &middot; move ≥30% &middot; RVOL ≥5x "
-            f"&middot; movers found: {len(movers):,}</div>",
-            unsafe_allow_html=True,
-        )
-    with btn_col:
-        if st.button(
-            "↻", key="force_refresh_penny",
-            help="Force-refresh: clear cache and re-scan",
-            use_container_width=True,
-        ):
-            fetch_penny_movers.clear()
-            st.rerun()
-
-    if scan_err:
-        st.error(f"Scan failed: {scan_err}")
-        return
-
-    if not movers:
-        st.info(
-            "No sub-$1 tickers met the criteria (≥30% from window-open · "
-            "float <20M · RVOL ≥5x) during the 4:00–9:29 AM ET window today."
-        )
-        return
-
-    _render_penny_table(movers, sector_lookup, empty_msg="")
 
 
 def render_top_movers() -> None:
@@ -1509,30 +1340,28 @@ def render_top_movers() -> None:
 # =============================================================================
 
 def render_penny_watchlist() -> None:
-    _title_col, _sound_col = st.columns([20, 1])
-    with _title_col:
-        st.markdown(
-            f"""<div style="margin-bottom:8px;">
-              <span style="font-size:0.75rem;color:{WHITE_MUTE};
-                text-transform:uppercase;letter-spacing:1px;">Penny Watchlist</span>
-            </div>
-            <div style="font-size:2rem;font-weight:700;color:{WHITE};
-              letter-spacing:-0.5px;margin-bottom:4px;">Penny Watchlist</div>
-            <div style="font-size:0.78rem;color:{WHITE_DIM};
-              margin-bottom:14px;">Criteria: price sub-$1 &middot; ≥30% move
-              &middot; ≥5x RVOL &middot; float &lt; 20M.</div>""",
-            unsafe_allow_html=True,
-        )
-    with _sound_col:
-        st.toggle(
-            "\U0001f514", value=True, key="enable_mover_sound",
-            help="Toggle new-mover alert sound",
-        )
+    with st.spinner("Loading penny candidates…"):
+        rows = fetch_penny_candidates()
 
-    with st.spinner("Loading universe…"):
-        sector_lookup = _build_movers_sector_lookup()
+    st.markdown(
+        f"""<div style="margin-bottom:8px;">
+          <span style="font-size:0.75rem;color:{WHITE_MUTE};
+            text-transform:uppercase;letter-spacing:1px;">Penny Watchlist</span>
+        </div>
+        <div style="font-size:2rem;font-weight:700;color:{WHITE};
+          letter-spacing:-0.5px;margin-bottom:4px;">Penny Watchlist</div>
+        <div style="font-size:0.78rem;color:{WHITE_DIM};
+          margin-bottom:14px;">Sub-$1 universe &middot; float &lt; 20M
+          &middot; candidates: {len(rows):,}</div>""",
+        unsafe_allow_html=True,
+    )
 
-    _penny_movers_fragment(sector_lookup=sector_lookup)
+    if not rows:
+        st.info("No sub-$1 tickers currently pass the filter (price $0.001–$0.999, float < 20M).")
+        return
+
+    df = quotes_to_df(rows, info={})
+    st.markdown(style_table(df).to_html(), unsafe_allow_html=True)
 
 
 # =============================================================================

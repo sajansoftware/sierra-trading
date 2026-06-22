@@ -370,6 +370,7 @@ def fetch_top_movers_dual(
                 "float":      q.float_shares,
                 "ref_time":   ref_time,
                 "high_time":  high_time,
+                "country":    q.country or "",
             }
 
         return (_compute("07:00", "09:29"),
@@ -546,6 +547,7 @@ def fetch_penny_movers(
                 "ref_time":   ref_time,
                 "high_time":  high_time,
                 "rvol":       rvol,
+                "country":    q.country or "",
             }
         except Exception:
             return None
@@ -586,6 +588,69 @@ def fetch_penny_movers(
 
     rows.sort(key=lambda r: -r["move_pct"])
     return rows[:max_rows]
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_penny_candidates(
+    max_float: int = 20_000_000,
+) -> list[Quote]:
+    """All sub-$1 penny stocks with sector-style enrichment.
+
+    Returns Quote objects suitable for the standard sector table layout
+    (Ticker, Close, Float, Mkt Cap, Country, Description).  Sorted by
+    float ascending.  Cached 15 minutes.
+    """
+    nd_prices = nasdaq_price_map()
+    seeds: dict[str, Quote] = {}
+    for t, nd in nd_prices.items():
+        nd_price, nd_sector, nd_industry, nd_mc, nd_country = nd
+        if not (0.001 <= nd_price <= 0.999):
+            continue
+        seeds[t] = Quote(
+            ticker=t, price=nd_price, previous_close=nd_price,
+            float_shares=None,
+            market_cap=int(nd_mc) if nd_mc else None,
+            sector=nd_sector, industry=nd_industry,
+            name=t, summary=None, country=nd_country,
+        )
+    if not seeds:
+        return []
+
+    fv_stats = _finviz_stats_batch(tuple(sorted(seeds.keys())))
+
+    try:
+        from verifier import fetch_nasdaq_desc_cached_only, fetch_nasdaq_desc
+    except Exception:
+        fetch_nasdaq_desc_cached_only = lambda t: ""
+        fetch_nasdaq_desc = lambda t: ""
+
+    enriched: dict[str, Quote] = {}
+    for t, seed in seeds.items():
+        desc = fetch_nasdaq_desc_cached_only(t) or None
+        eq = _enrich_with_fallbacks(seed, nd_prices.get(t), fv_stats.get(t), desc)
+        # Keep if price in range; drop if known float exceeds max
+        if not (0.001 <= (eq.close or 0) <= 0.999):
+            continue
+        if eq.float_shares is not None and eq.float_shares > max_float:
+            continue
+        enriched[t] = eq
+
+    # Fetch NASDAQ descriptions for survivors that lack one
+    missing = [t for t, q in enriched.items() if not q.summary]
+    if missing:
+        def _one(t):
+            try:
+                return t, fetch_nasdaq_desc(t)
+            except Exception:
+                return t, ""
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for t, d in pool.map(_one, missing):
+                if d:
+                    enriched[t] = dc_replace(enriched[t], summary=d)
+
+    rows = list(enriched.values())
+    rows.sort(key=lambda q: (q.float_shares or 1e12))
+    return rows
 
 
 @st.cache_data(ttl=15, show_spinner=False)   # ~live (intraday refresh)
@@ -710,6 +775,7 @@ def fetch_top_movers(
                 "float":      q.float_shares,
                 "ref_time":   ref_time,         # e.g. "07:00 ET"
                 "high_time":  high_time,
+                "country":    q.country or "",
             }
         except Exception:
             return None
@@ -1319,6 +1385,7 @@ def _filtered_by_category_cached(
     key is computed; on a hit we return the previously-built dict and
     skip all the Finviz / NASDAQ / iteration work.
     """
+    _cache_v2 = True  # bytecode bump: force re-cache after country fix
     universe_dict = {k: list(v) for k, v in universe_tuple}
     return _filtered_by_category_impl(universe_dict, list(ticker_tuple))
 
