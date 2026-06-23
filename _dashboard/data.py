@@ -6,11 +6,10 @@ returns rows grouped by category folder.
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace as dc_replace
 from datetime import date, datetime, timedelta
-
-import re
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -23,6 +22,7 @@ MIN_PRICE = 1.0
 MAX_PRICE = 20.0
 MAX_FLOAT = 20_000_000
 FLOAT_CALC_MARGIN = 0.25  # buffer when estimating float from outstanding shares
+FREE_FLOAT_RATIO = 0.70  # conservative estimate: 70% of outstanding shares are freely tradeable
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class Quote:
         """Strict criterion: price $1-$20 AND a known float strictly under 20M.
 
         Float-source fallback chain (in filtered_by_category):
-          yfinance -> Finviz -> Finviz shares_out * 0.7
+          yfinance -> Finviz -> Finviz shares_out * FREE_FLOAT_RATIO
         If none of those returned a number, the ticker is excluded
         (we can't honor the float<20M constraint without the data).
         """
@@ -260,6 +260,56 @@ def classify_catalyst(title: str) -> str:
     return "Press Release"
 
 
+def _enrich_news(rows: list[dict], today: date) -> None:
+    """Attach today's best headline to each mover row (in-place).
+
+    Searches Finviz and Yahoo RSS for each ticker, preferring same-day
+    headlines.  Falls back to most-recent if no same-day news exists.
+    Deduplicates across rows sharing a ticker.
+    """
+    try:
+        from news_sources import fetch_finviz_news, fetch_yahoo_rss
+    except Exception:
+        for r in rows:
+            r.setdefault("news_title", "")
+            r.setdefault("news_link", "")
+            r.setdefault("news_source", "\u2014")
+            r.setdefault("news_type", "\u2014")
+        return
+
+    seen: dict[str, dict[str, str]] = {}
+    for r in rows:
+        tkr = r["ticker"]
+        if tkr in seen:
+            payload = seen[tkr]
+        else:
+            items: list[dict] = []
+            try:
+                items.extend(fetch_finviz_news(tkr))
+            except Exception:
+                pass
+            try:
+                items.extend(fetch_yahoo_rss(tkr))
+            except Exception:
+                pass
+            todays = [n for n in items if n["date"] == today]
+            best = todays[0] if todays else (items[0] if items else None)
+            if best:
+                payload = {
+                    "title": best["title"],
+                    "link": best["link"],
+                    "source": best["source"],
+                    "type": classify_catalyst(best["title"]),
+                }
+            else:
+                payload = {"title": "", "link": "", "source": "\u2014", "type": "\u2014"}
+            seen[tkr] = payload
+        r["news_title"] = payload["title"]
+        r["news_link"] = payload["link"]
+        r["news_source"] = payload["source"]
+        r["news_type"] = payload["type"]
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_top_movers_dual(
     universe_tickers: tuple[str, ...],
@@ -385,52 +435,11 @@ def fetch_top_movers_dual(
             if early_r:
                 early_rows.append(early_r)
 
-    # Sort each slice and enrich both with news (one news call per
-    # unique ticker across both slices).
     main_rows.sort(key=lambda r: -r["move_pct"])
     early_rows.sort(key=lambda r: -r["move_pct"])
     main_rows = main_rows[:max_rows]
     early_rows = early_rows[:max_rows]
-
-    try:
-        from news_sources import fetch_finviz_news, fetch_yahoo_rss
-        seen_news: dict[str, dict] = {}
-        for r in (main_rows + early_rows):
-            tkr = r["ticker"]
-            if tkr in seen_news:
-                cached = seen_news[tkr]
-                r["news_title"]  = cached["title"]
-                r["news_link"]   = cached["link"]
-                r["news_source"] = cached["source"]
-                r["news_type"]   = cached["type"]
-                continue
-            items = []
-            try: items.extend(fetch_finviz_news(tkr))
-            except Exception: pass
-            try: items.extend(fetch_yahoo_rss(tkr))
-            except Exception: pass
-            todays = [n for n in items if n["date"] == today_et]
-            best = todays[0] if todays else (items[0] if items else None)
-            if best:
-                payload = {
-                    "title":  best["title"],
-                    "link":   best["link"],
-                    "source": best["source"],
-                    "type":   classify_catalyst(best["title"]),
-                }
-            else:
-                payload = {"title": "", "link": "", "source": "—", "type": "—"}
-            seen_news[tkr] = payload
-            r["news_title"]  = payload["title"]
-            r["news_link"]   = payload["link"]
-            r["news_source"] = payload["source"]
-            r["news_type"]   = payload["type"]
-    except Exception:
-        for r in (main_rows + early_rows):
-            r.setdefault("news_title", "")
-            r.setdefault("news_link", "")
-            r.setdefault("news_source", "—")
-            r.setdefault("news_type", "—")
+    _enrich_news(main_rows + early_rows, today_et)
 
     return {"main": main_rows, "early": early_rows}
 
@@ -558,33 +567,7 @@ def fetch_penny_movers(
             if r:
                 rows.append(r)
 
-    # News enrichment
-    try:
-        from news_sources import fetch_finviz_news, fetch_yahoo_rss
-        for r in rows:
-            news_items = []
-            try: news_items.extend(fetch_finviz_news(r["ticker"]))
-            except Exception: pass
-            try: news_items.extend(fetch_yahoo_rss(r["ticker"]))
-            except Exception: pass
-            todays = [n for n in news_items if n["date"] == today_et]
-            best = todays[0] if todays else (news_items[0] if news_items else None)
-            if best:
-                r["news_title"]  = best["title"]
-                r["news_link"]   = best["link"]
-                r["news_source"] = best["source"]
-                r["news_type"]   = classify_catalyst(best["title"])
-            else:
-                r["news_title"]  = ""
-                r["news_link"]   = ""
-                r["news_source"] = "—"
-                r["news_type"]   = "—"
-    except Exception:
-        for r in rows:
-            r.setdefault("news_title", "")
-            r.setdefault("news_link", "")
-            r.setdefault("news_source", "—")
-            r.setdefault("news_type", "—")
+    _enrich_news(rows, today_et)
 
     rows.sort(key=lambda r: -r["move_pct"])
     return rows[:max_rows]
@@ -638,7 +621,7 @@ def fetch_penny_candidates(
     # Fetch NASDAQ descriptions for survivors that lack one
     missing = [t for t, q in enriched.items() if not q.summary]
     if missing:
-        def _one(t):
+        def _one(t: str) -> tuple[str, str]:
             try:
                 return t, fetch_nasdaq_desc(t)
             except Exception:
@@ -786,43 +769,7 @@ def fetch_top_movers(
             if r:
                 rows.append(r)
 
-    # Enrich with today's news headline (Finviz first, then any source)
-    try:
-        from news_sources import fetch_finviz_news, fetch_yahoo_rss
-        for r in rows:
-            news_items = []
-            try:
-                news_items.extend(fetch_finviz_news(r["ticker"]))
-            except Exception:
-                pass
-            try:
-                news_items.extend(fetch_yahoo_rss(r["ticker"]))
-            except Exception:
-                pass
-            # Prefer same-day, then most recent
-            todays = [n for n in news_items if n["date"] == today_et]
-            best = todays[0] if todays else (news_items[0] if news_items else None)
-            if best:
-                r["news_title"] = best["title"]
-                r["news_link"] = best["link"]
-                r["news_source"] = best["source"]
-                r["news_type"] = classify_catalyst(best["title"])
-            else:
-                r["news_title"] = ""
-                r["news_link"] = ""
-                r["news_source"] = "—"
-                r["news_type"] = "—"
-    except Exception:
-        for r in rows:
-            r.setdefault("news_title", "")
-            r.setdefault("news_link", "")
-            r.setdefault("news_source", "—")
-            # If a title made it onto the row, classify it; otherwise
-            # mark as "—" (genuinely no catalyst).
-            if r.get("news_title"):
-                r.setdefault("news_type", classify_catalyst(r["news_title"]))
-            else:
-                r.setdefault("news_type", "—")
+    _enrich_news(rows, today_et)
 
     rows.sort(key=lambda r: r["move_pct"], reverse=True)
     return rows[:max_rows]
@@ -1303,7 +1250,7 @@ def _nasdaq_descriptions_batch(tickers: tuple[str, ...]) -> dict[str, str]:
     except Exception:
         return {}
     out: dict[str, str] = {}
-    def _one(t: str):
+    def _one(t: str) -> tuple[str, str]:
         try:
             raw = _nasdaq_profile_raw(t)
             data = (raw.get("data") or {}) if isinstance(raw, dict) else {}
@@ -1335,8 +1282,8 @@ def _enrich_with_fallbacks(
     Float-source chain (best to worst):
       1. yfinance .floatShares (when present on the seed)
       2. Finviz Shs Float
-      3. Finviz Shs Outstand * 0.70
-      4. NASDAQ market_cap / price * 0.70  <- guarantees a number
+      3. Finviz Shs Outstand * FREE_FLOAT_RATIO
+      4. NASDAQ market_cap / price * FREE_FLOAT_RATIO  <- guarantees a number
          for every ticker that has both price and mcap.
     """
     float_shares = q.float_shares
@@ -1350,7 +1297,7 @@ def _enrich_with_fallbacks(
         else:
             so = fv.get("shares_out")
             if so:
-                float_shares = int(so * 0.70)
+                float_shares = int(so * FREE_FLOAT_RATIO)
     if (market_cap is None or market_cap <= 0) and fv:
         mc = fv.get("market_cap")
         if mc:
@@ -1360,7 +1307,7 @@ def _enrich_with_fallbacks(
     # Final-fallback float estimate: implied shares from market cap
     if (float_shares is None or float_shares <= 0) and market_cap and q.close and q.close > 0:
         implied_shares = market_cap / q.close
-        float_shares = int(implied_shares * 0.70)
+        float_shares = int(implied_shares * FREE_FLOAT_RATIO)
     if not summary and nd_desc:
         summary = nd_desc
 
@@ -1462,7 +1409,7 @@ def _filtered_by_category_impl(
     # writes to the 30-day disk cache so subsequent loads are instant.
     missing = [t for t, q in enriched_pass.items() if not q.summary]
     if missing:
-        def _one(t):
+        def _one(t: str) -> tuple[str, str]:
             try:
                 return t, fetch_nasdaq_desc(t)
             except Exception:

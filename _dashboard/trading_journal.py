@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, asdict
 from datetime import datetime
-import json
 from pathlib import Path
 
 JOURNAL_PATH = Path(__file__).parent / "journal_data.json"

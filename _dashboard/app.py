@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import math
 import struct
+import threading as _threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -218,7 +219,7 @@ def inject_theme() -> None:
             color: {WHITE};
         }}
         .main .block-container {{
-            padding-top: 2.2rem; padding-bottom: 2.5rem; max-width: 1200px;
+            padding-top: 1.8rem; padding-bottom: 2rem; max-width: 1280px;
         }}
         /* Default text: white on navy */
         h1, h2, h3, h4, h5, h6, p, span, label, li, code, .stMarkdown {{
@@ -228,7 +229,6 @@ def inject_theme() -> None:
         section[data-testid="stSidebar"] > div:first-child {{
             background-color: {NAVY_CARD};
             border-right: 1px solid {BORDER};
-            padding-top: 1rem;
         }}
         section[data-testid="stSidebar"] hr {{
             border-color: {BORDER}; margin: 14px 0;
@@ -238,27 +238,18 @@ def inject_theme() -> None:
             background-color: {NAVY_CARD};
             color: {WHITE};
             border: 1px solid {BORDER};
-            border-radius: 8px;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            transition: all 0.15s ease;
+            border-radius: 6px;
+            font-weight: 500;
         }}
         .stButton > button:hover, .stForm button:hover {{
             background-color: {NAVY_HOVER};
             border-color: {ACCENT};
             color: {WHITE};
-            box-shadow: 0 0 0 1px {ACCENT};
         }}
         .stButton > button[kind="primary"] {{
             background-color: {ACCENT};
             color: #06121e;
             border-color: {ACCENT};
-            font-weight: 700;
-        }}
-        .stButton > button[kind="primary"]:hover {{
-            background-color: #90caf9;
-            border-color: #90caf9;
-            box-shadow: 0 4px 12px rgba(100,181,246,0.3);
         }}
         /* ============ INPUTS ============
          * Streamlit's default light theme renders inputs with a white-ish
@@ -303,7 +294,6 @@ def inject_theme() -> None:
             background-color: {NAVY_CARD} !important;
             color: {WHITE_DIM} !important;
             border: 1px solid {BORDER} !important;
-            border-radius: 10px !important;
         }}
         .stAlert * {{ color: {WHITE_DIM} !important; }}
         .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
@@ -313,15 +303,13 @@ def inject_theme() -> None:
         [data-testid="stDataFrame"] {{
             background-color: {NAVY_CARD};
             border: 1px solid {BORDER};
-            border-radius: 10px;
+            border-radius: 6px;
         }}
         /* Native dialog (catalyst modal) */
         div[role="dialog"] {{
             background-color: {NAVY_CARD} !important;
             color: {WHITE} !important;
             border: 1px solid {BORDER} !important;
-            border-radius: 14px !important;
-            box-shadow: 0 24px 48px rgba(0,0,0,0.5) !important;
         }}
         div[role="dialog"] * {{ color: {WHITE} !important; }}
         div[role="dialog"] a {{ color: {ACCENT} !important; }}
@@ -332,23 +320,21 @@ def inject_theme() -> None:
             border-collapse: collapse;
             width: 100%;
             border: 1px solid {BORDER};
-            border-radius: 10px;
+            border-radius: 6px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }}
         table.sierra-table th, table.sierra-table td {{
             background-color: {NAVY} !important;
             color: {WHITE};
         }}
         table.sierra-table tbody tr:nth-child(even) td {{
-            background-color: rgba(255,255,255,0.03) !important;
+            background-color: rgba(255,255,255,0.025) !important;
         }}
         table.sierra-table tbody tr:hover td {{
             background-color: {NAVY_HOVER} !important;
         }}
         table.sierra-table tbody tr.sierra-clickable {{
             cursor: pointer;
-            transition: background 0.12s ease;
         }}
         table.sierra-table tbody tr.sierra-clickable:hover td {{
             background-color: {NAVY_HOVER} !important;
@@ -363,80 +349,74 @@ def inject_theme() -> None:
 
         /* Table header cell */
         .sierra-th {{
-            padding: 12px 14px;
-            border-bottom: 2px solid {BORDER};
+            padding: 10px 12px;
+            border-bottom: 1px solid {BORDER};
             background: {NAVY_CARD} !important;
-            color: {WHITE_MUTE} !important;
+            color: {WHITE} !important;
             font-weight: 600;
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.5px;
             text-align: left;
         }}
         .sierra-th.text-right {{ text-align: right; }}
         .sierra-th.text-center {{ text-align: center; }}
-        .sierra-th.wide-pad {{ padding: 12px 16px; }}
+        .sierra-th.wide-pad {{ padding: 10px 14px; }}
 
         /* Table body cell */
         .sierra-td {{
-            padding: 11px 14px;
-            border-bottom: 1px solid rgba(30,58,95,0.6);
+            padding: 9px 12px;
+            border-bottom: 1px solid {BORDER};
             color: {WHITE_DIM} !important;
-            font-size: 0.88rem;
+            font-size: 0.9rem;
             vertical-align: top;
-            transition: background 0.1s ease;
         }}
         .sierra-td.text-right {{ text-align: right; }}
         .sierra-td.text-center {{ text-align: center; }}
-        .sierra-td.narrow {{ font-size: 0.83rem; max-width: 340px; }}
+        .sierra-td.narrow {{ font-size: 0.85rem; max-width: 340px; }}
         .sierra-td.nowrap {{ white-space: nowrap; }}
-        .sierra-td.wide-pad {{ padding: 11px 16px; }}
+        .sierra-td.wide-pad {{ padding: 9px 14px; }}
 
         /* Badge */
         .sierra-badge {{
             display: inline-block;
             font-weight: 700;
-            font-size: 0.68rem;
-            padding: 3px 10px;
-            border-radius: 6px;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
             white-space: nowrap;
             color: #06121e !important;
             line-height: 1.4;
-            letter-spacing: 0.02em;
         }}
         .sierra-badge.sm {{
-            font-size: 0.62rem;
-            padding: 2px 7px;
-            border-radius: 4px;
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 3px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }}
         .sierra-badge.lg {{
-            font-size: 0.76rem;
-            padding: 4px 12px;
+            font-size: 0.78rem;
+            padding: 3px 10px;
         }}
 
         /* Ticker link */
         .sierra-link {{
-            color: {ACCENT} !important;
+            color: {WHITE} !important;
             font-weight: 700;
             text-decoration: none !important;
-            border-bottom: none;
-            transition: color 0.12s ease;
+            border-bottom: 1px dotted {ACCENT};
         }}
         .sierra-link:hover {{
-            color: #90caf9 !important;
-            text-decoration: underline !important;
+            color: {ACCENT} !important;
+            border-bottom-style: solid;
         }}
         .sierra-link-ext {{
             color: {ACCENT} !important;
             text-decoration: none;
             font-size: 0.78rem;
             white-space: nowrap;
-            transition: color 0.12s ease;
         }}
         .sierra-link-ext:hover {{
-            color: #90caf9 !important;
             text-decoration: underline !important;
         }}
 
@@ -444,103 +424,85 @@ def inject_theme() -> None:
         .sierra-card {{
             background: {NAVY_CARD};
             border: 1px solid {BORDER};
-            border-radius: 12px;
-            padding: 18px 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            border-radius: 8px;
+            padding: 14px 16px;
         }}
-        .sierra-card:hover {{
-            border-color: rgba(100,181,246,0.25);
-        }}
-        .sierra-card.stat {{
-            text-align: center;
-            padding: 20px 16px;
-        }}
+        .sierra-card.stat {{ text-align: center; }}
         .sierra-card .card-label {{
-            font-size: 0.68rem;
+            font-size: 0.72rem;
             color: {WHITE_MUTE} !important;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
         }}
         .sierra-card .card-value {{
-            font-size: 1.6rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
+            font-size: 1.35rem;
+            font-weight: 700;
         }}
         .sierra-card.event {{
             display: flex;
-            gap: 16px;
+            gap: 14px;
             align-items: stretch;
-            padding: 16px 18px;
-            margin-bottom: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
         }}
         .sierra-card.theme {{
-            padding: 18px 22px;
-            margin-bottom: 14px;
+            padding: 14px 18px;
+            margin-bottom: 12px;
         }}
 
         /* Page header */
         .sierra-page-header {{
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid {BORDER};
+            margin-bottom: 8px;
         }}
         .sierra-page-header .section-label {{
-            font-size: 0.7rem;
-            color: {ACCENT} !important;
+            font-size: 0.75rem;
+            color: {WHITE_MUTE} !important;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 1px;
             display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
+            margin-bottom: 4px;
         }}
         .sierra-page-header .page-title {{
-            font-size: 2.2rem;
-            font-weight: 800;
+            font-size: 2rem;
+            font-weight: 700;
             color: {WHITE} !important;
-            letter-spacing: -0.8px;
-            margin-bottom: 6px;
-            line-height: 1.15;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+            line-height: 1.2;
         }}
         .sierra-page-header .page-subtitle {{
-            font-size: 0.82rem;
-            color: {WHITE_MUTE} !important;
-            margin-bottom: 0;
-            line-height: 1.6;
-            max-width: 720px;
+            font-size: 0.78rem;
+            color: {WHITE_DIM} !important;
+            margin-bottom: 14px;
+            line-height: 1.55;
+            max-width: 780px;
         }}
 
         /* Sidebar branding */
         .sierra-brand {{
-            padding: 4px 0 16px;
-            font-size: 1.25rem;
-            font-weight: 800;
+            padding: 6px 0 14px;
+            font-size: 1.15rem;
+            font-weight: 700;
             color: {WHITE} !important;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.3px;
             border-bottom: 2px solid {ACCENT};
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }}
         .sierra-nav-section {{
-            font-size: 0.65rem;
+            font-size: 0.7rem;
             color: {WHITE_MUTE} !important;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin: 20px 0 10px;
-            padding-top: 16px;
+            letter-spacing: 1px;
+            margin: 18px 0 8px;
+            padding-top: 14px;
             border-top: 1px solid {BORDER};
-            font-weight: 600;
         }}
 
         /* Sidebar active button */
         section[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
             box-shadow: inset 3px 0 0 {WHITE};
         }}
-        /* Sidebar button spacing */
-        section[data-testid="stSidebar"] .stButton {{
-            margin-bottom: 2px;
-        }}
-
         /* Flex helpers */
         .sierra-flex-row {{
             display: flex;
@@ -556,9 +518,9 @@ def inject_theme() -> None:
         }}
 
         /* Spacers */
-        .sierra-spacer {{ height: 20px; }}
-        .sierra-spacer.sm {{ height: 12px; }}
-        .sierra-spacer.lg {{ height: 28px; }}
+        .sierra-spacer {{ height: 18px; }}
+        .sierra-spacer.sm {{ height: 10px; }}
+        .sierra-spacer.lg {{ height: 24px; }}
 
         /* Text utilities */
         .text-mute {{ color: {WHITE_MUTE} !important; }}
@@ -583,11 +545,11 @@ def inject_theme() -> None:
                 padding-right: 0.5rem !important;
             }}
             .sierra-td, .sierra-th {{
-                padding: 8px 10px;
+                padding: 6px 8px;
                 font-size: 0.78rem;
             }}
             .sierra-page-header .page-title {{
-                font-size: 1.6rem;
+                font-size: 1.5rem;
             }}
             .sierra-card.event {{
                 flex-direction: column;
@@ -658,6 +620,14 @@ def _table_head(columns: list[tuple[str, str]], wide: bool = False) -> str:
 # =============================================================================
 # Helpers
 # =============================================================================
+def _human_sub_label(sec: str, sub_key: str) -> str:
+    """Map a sector + sub-key pair to a human-readable label."""
+    try:
+        return SECTORS[sec][sub_key][0]
+    except Exception:
+        return (sub_key or "").replace("_", " ")
+
+
 def load_description(dir_path: Path) -> str:
     """Legacy plain-text loader (kept for backwards compat)."""
     p = dir_path / "description.md"
@@ -736,7 +706,7 @@ def _float_bg(v: float) -> str:
     )
 
 
-def style_table(df: pd.DataFrame):
+def style_table(df: pd.DataFrame) -> pd.io.formats.style.Styler | pd.DataFrame:
     if df.empty:
         return df
     s = df.style.format({
@@ -1275,12 +1245,6 @@ def _render_movers_table(movers: list[dict],
         st.info(empty_msg)
         return
 
-    def _human_sub_label(sec: str, sub_key: str) -> str:
-        try:
-            return SECTORS[sec][sub_key][0]
-        except Exception:
-            return sub_key.replace("_", " ")
-
     thead = _table_head([
         ("Ticker", "left"), ("Sector", "left"), ("Country", "left"),
         ("Ref Price", "right"),     # price at window-open (7:00 or 4:00)
@@ -1818,12 +1782,6 @@ def render_backtesting() -> None:
     except Exception:
         pass
 
-    def _human_sub_label(sec: str, sub_key: str) -> str:
-        try:
-            return SECTORS[sec][sub_key][0]
-        except Exception:
-            return (sub_key or "").replace("_", " ")
-
     universe = s.get("universe_size", 0)
     to_scan = s.get("to_scan", 0) or universe
     done = s.get("processed", 0)
@@ -2044,8 +2002,6 @@ def render_ipo_calendar() -> None:
     for sec in ("Biotechnology", "Technology", "Energy", "Other"):
         _ipo_section(sec, filtered.get(sec, []))
 
-
-import threading as _threading
 
 # =============================================================================
 # Backtest archive background worker
@@ -2276,7 +2232,7 @@ def main() -> None:
             st.session_state.selected_ticker = tkr
             st.rerun()
 
-    def _reset_view():
+    def _reset_view() -> None:
         st.session_state.view = "sector"
 
     category_keys = sorted(SECTORS.keys()) + ["Trading Journal"]
