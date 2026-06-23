@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sierra Trading — Pre-Market Penny Stock Scanner</title>
+  <meta name="description" content="Scan low-float penny stocks before the bell. Catalysts, SEC filings, AI research agents — all in one dashboard. $29/month with a 7-day free trial.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --navy: #0a1929;
+      --navy-card: #102841;
+      --navy-hover: #1a3a5c;
+      --border: #1e3a5f;
+      --white: #ffffff;
+      --white-dim: #e2e8f0;
+      --white-mute: #94a3b8;
+      --accent: #64b5f6;
+      --good: #22c55e;
+      --warn: #facc15;
+      --danger: #ef4444;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--navy);
+      color: var(--white);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ---------- NAV ---------- */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 25, 41, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .logo {
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: var(--white);
+      letter-spacing: -0.02em;
+    }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
+    .nav-links a {
+      color: var(--white-mute);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--white); text-decoration: none; }
+
+    /* ---------- BUTTONS ---------- */
+    .btn {
+      display: inline-block;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(100, 181, 246, 0.25);
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--navy);
+    }
+    .btn-outline {
+      background: transparent;
+      color: var(--accent);
+      border: 2px solid var(--accent);
+      padding: 12px 30px;
+    }
+    .btn-large {
+      padding: 18px 40px;
+      font-size: 1.1rem;
+    }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      padding: 140px 0 80px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(100, 181, 246, 0.12);
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 999px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(100, 181, 246, 0.2);
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+    .hero h1 .highlight { color: var(--accent); }
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--white-mute);
+      max-width: 600px;
+      margin: 0 auto 36px;
+    }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .hero-sub {
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--white-mute);
+    }
+
+    .hero-mockup {
+      margin-top: 60px;
+      background: var(--navy-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      color: var(--white-mute);
+      font-size: 0.95rem;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-mockup .mockup-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .hero-mockup .mockup-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .hero-mockup .mockup-dot:nth-child(1) { background: var(--danger); }
+    .hero-mockup .mockup-dot:nth-child(2) { background: var(--warn); }
+    .hero-mockup .mockup-dot:nth-child(3) { background: var(--good); }
+    .mockup-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .mockup-cell {
+      background: var(--navy);
+      border-radius: 6px;
+      padding: 20px 12px;
+      font-size: 0.8rem;
+      color: var(--white-mute);
+    }
+    .mockup-cell .ticker {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--white);
+      margin-bottom: 4px;
+    }
+    .mockup-cell .gain {
+      color: var(--good);
+      font-weight: 600;
+    }
+
+    /* ---------- SECTIONS ---------- */
+    section { padding: 80px 0; }
+    .section-label {
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+    .section-subtitle {
+      font-size: 1.1rem;
+      color: var(--white-mute);
+      max-width: 620px;
+      margin-bottom: 48px;
+    }
+    .section-center { text-align: center; }
+    .section-center .section-subtitle { margin-left: auto; margin-right: auto; }
+
+    /* ---------- PROBLEM ---------- */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .problem-card {
+      background: var(--navy-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 24px;
+    }
+    .problem-icon {
+      font-size: 1.8rem;
+      margin-bottom: 16px;
+      display: block;
+    }
+    .problem-card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .problem-card p {
+      color: var(--white-mute);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    /* ---------- FEATURES ---------- */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--navy-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 36px 28px;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 20px;
+      background: rgba(100, 181, 246, 0.1);
+    }
+    .feature-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      color: var(--white-mute);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    /* ---------- HOW IT WORKS ---------- */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      position: relative;
+    }
+    .step {
+      text-align: center;
+      position: relative;
+    }
+    .step-number {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(100, 181, 246, 0.12);
+      border: 2px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--accent);
+      margin: 0 auto 20px;
+    }
+    .step h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .step p {
+      color: var(--white-mute);
+      font-size: 0.92rem;
+      max-width: 280px;
+      margin: 0 auto;
+      line-height: 1.55;
+    }
+
+    /* ---------- PRICING ---------- */
+    .pricing-wrapper {
+      display: flex;
+      justify-content: center;
+    }
+    .pricing-card {
+      background: var(--navy-card);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 48px 40px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+    }
+    .pricing-card .price-tag {
+      font-size: 3.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 4px;
+    }
+    .pricing-card .price-tag span {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--white-mute);
+    }
+    .pricing-card .trial-note {
+      color: var(--good);
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 28px;
+    }
+    .pricing-features {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 32px;
+    }
+    .pricing-features li {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.95rem;
+      color: var(--white-dim);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .pricing-features li:last-child { border-bottom: none; }
+    .check {
+      color: var(--good);
+      font-weight: 700;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    /* ---------- FAQ ---------- */
+    .faq-list {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+      padding: 24px 0;
+    }
+    .faq-item:first-child { border-top: 1px solid var(--border); }
+    .faq-question {
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .faq-question:hover { color: var(--accent); }
+    .faq-arrow {
+      font-size: 1.2rem;
+      transition: transform 0.25s;
+      color: var(--white-mute);
+      flex-shrink: 0;
+    }
+    .faq-item.open .faq-arrow { transform: rotate(180deg); }
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .faq-answer p {
+      padding-top: 12px;
+      color: var(--white-mute);
+      font-size: 0.95rem;
+      line-height: 1.65;
+    }
+    .faq-item.open .faq-answer { max-height: 300px; }
+
+    /* ---------- CTA BANNER ---------- */
+    .cta-banner {
+      text-align: center;
+      padding: 80px 0;
+    }
+    .cta-banner h2 {
+      font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .cta-banner p {
+      color: var(--white-mute);
+      font-size: 1.1rem;
+      margin-bottom: 32px;
+    }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      color: var(--white-mute);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--white-mute); }
+    footer a:hover { color: var(--white); }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width: 768px) {
+      .nav-links a:not(.btn) { display: none; }
+      .hero { padding: 120px 0 60px; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; gap: 40px; }
+      .mockup-grid { grid-template-columns: 1fr; }
+      .pricing-card { padding: 36px 24px; }
+      .hero-buttons { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <div class="logo">Sierra<span>Trading</span></div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="#" class="btn btn-outline" style="padding: 8px 20px; font-size: 0.9rem;">Subscribe</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Pre-market penny stock scanner</div>
+      <h1>Find penny stock setups<br><span class="highlight">before the bell rings</span></h1>
+      <p>Low-float scanner, catalyst archive, SEC filings, and AI research agents — everything you need to trade penny stocks, in one dashboard.</p>
+      <div class="hero-buttons">
+        <a href="#" class="btn btn-primary btn-large">Start 7-day free trial</a>
+        <a href="#features" class="btn btn-outline btn-large">See features</a>
+      </div>
+      <p class="hero-sub">$29/month after trial &middot; Cancel anytime</p>
+
+      <div class="hero-mockup">
+        <div class="mockup-bar">
+          <div class="mockup-dot"></div>
+          <div class="mockup-dot"></div>
+          <div class="mockup-dot"></div>
+        </div>
+        <div class="mockup-grid">
+          <div class="mockup-cell">
+            <div class="ticker">ABCD</div>
+            <div class="gain">+32.5%</div>
+            <div>Biotech &middot; Low float</div>
+          </div>
+          <div class="mockup-cell">
+            <div class="ticker">EFGH</div>
+            <div class="gain">+18.2%</div>
+            <div>Tech &middot; 8-K filing</div>
+          </div>
+          <div class="mockup-cell">
+            <div class="ticker">IJKL</div>
+            <div class="gain">+14.7%</div>
+            <div>Energy &middot; Catalyst</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem -->
+  <section id="problem">
+    <div class="container">
+      <div class="section-label">The problem</div>
+      <div class="section-title">Penny stock traders waste hours scanning for setups</div>
+      <div class="section-subtitle">Most traders cobble together 5+ tools every morning. Screeners, news feeds, SEC filings, float data — scattered across a dozen tabs.</div>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <span class="problem-icon">&#9201;</span>
+          <h3>Too many tabs</h3>
+          <p>Finviz for screening, SEC EDGAR for filings, Yahoo Finance for news, a spreadsheet for tracking — your pre-market routine takes forever.</p>
+        </div>
+        <div class="problem-card">
+          <span class="problem-icon">&#128269;</span>
+          <h3>Missed catalysts</h3>
+          <p>A stock spikes 40% and you find the 8-K filing after the move. Without a unified catalyst feed, you're always one step behind.</p>
+        </div>
+        <div class="problem-card">
+          <span class="problem-icon">&#128200;</span>
+          <h3>No sector context</h3>
+          <p>Is that biotech runner in a hot sector or a dead theme? Without sector classification and trend data, you're trading blind.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="container section-center">
+      <div class="section-label">Features</div>
+      <div class="section-title">Everything you need, one dashboard</div>
+      <div class="section-subtitle">Sierra Trading replaces your stack of screeners, news feeds, and spreadsheets with a single focused tool built for penny stock traders.</div>
+    </div>
+    <div class="container">
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#128225;</div>
+          <h3>Pre-Market Scanner</h3>
+          <p>Scans for low-float stocks between $1-$20 with 10%+ pre-market moves. Filter by volume, float, and sector before the opening bell.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128240;</div>
+          <h3>Catalyst Archive</h3>
+          <p>SEC 8-K filings, Finviz news, and Yahoo Finance articles unified in one click. See exactly why a stock is moving — no more tab hopping.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127993;</div>
+          <h3>11-Sector Classification</h3>
+          <p>Every stock auto-classified into GICS sectors with a biotech-specific color taxonomy. Instantly see which sectors are running and spot theme plays.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#129302;</div>
+          <h3>AI Research Agents</h3>
+          <p>Stan analyzes tickers with AI-powered research. Trending themes engine surfaces sector rotations and hot plays before they crowd.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works">
+    <div class="container section-center">
+      <div class="section-label">How it works</div>
+      <div class="section-title">From sign-up to setups in minutes</div>
+      <div class="section-subtitle">No complex configuration. No data feeds to connect. Just open the dashboard and start scanning.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Subscribe</h3>
+          <p>Sign up and get instant access. Your 7-day free trial starts immediately — no credit card gymnastics.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Open the scanner</h3>
+          <p>Launch the dashboard before market open. The pre-market scanner auto-populates with today's top movers.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Find setups with catalysts</h3>
+          <p>Click any ticker to see SEC filings, news catalysts, float data, and sector context — all on one screen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section id="pricing">
+    <div class="container section-center">
+      <div class="section-label">Pricing</div>
+      <div class="section-title">One plan. Everything included.</div>
+      <div class="section-subtitle">No tiers, no upsells. Every feature, every update, one flat price.</div>
+      <div class="pricing-wrapper">
+        <div class="pricing-card">
+          <div class="price-tag">$29<span>/month</span></div>
+          <div class="trial-note">7-day free trial included</div>
+          <ul class="pricing-features">
+            <li><span class="check">&#10003;</span> Pre-market low-float scanner</li>
+            <li><span class="check">&#10003;</span> Catalyst archive (SEC, Finviz, Yahoo)</li>
+            <li><span class="check">&#10003;</span> 11-sector GICS classification</li>
+            <li><span class="check">&#10003;</span> AI research agents (Stan + trending themes)</li>
+            <li><span class="check">&#10003;</span> Penny watchlist &amp; IPO calendar</li>
+            <li><span class="check">&#10003;</span> All future updates included</li>
+          </ul>
+          <a href="#" class="btn btn-primary btn-large" style="width: 100%;">Start free trial</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="container section-center">
+      <div class="section-label">FAQ</div>
+      <div class="section-title">Common questions</div>
+      <div class="section-subtitle">Everything you need to know before getting started.</div>
+    </div>
+    <div class="container">
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-question">
+            What data sources does Sierra Trading use?
+            <span class="faq-arrow">&#9660;</span>
+          </div>
+          <div class="faq-answer">
+            <p>We pull data from NASDAQ screener APIs, SEC EDGAR (8-K filings), Finviz, and Yahoo Finance. Stock quotes update in real-time during market hours, and the pre-market scanner runs automatically before the bell.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            How often is the data updated?
+            <span class="faq-arrow">&#9660;</span>
+          </div>
+          <div class="faq-answer">
+            <p>The scanner refreshes automatically throughout the trading session. Pre-market data starts populating around 4 AM ET. Catalyst data (news and filings) is fetched on-demand when you click a ticker, so it's always current.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            Can I cancel anytime?
+            <span class="faq-arrow">&#9660;</span>
+          </div>
+          <div class="faq-answer">
+            <p>Yes. There are no contracts or commitments. Cancel your subscription at any time from your account settings and you won't be charged again. Your access continues through the end of your current billing period.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            Is this a trading signals or alerts service?
+            <span class="faq-arrow">&#9660;</span>
+          </div>
+          <div class="faq-answer">
+            <p>No. Sierra Trading is a research and scanning tool, not a signals service. We surface data, catalysts, and sector context to help you make your own informed decisions. We don't provide buy/sell recommendations.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            What stocks does the scanner cover?
+            <span class="faq-arrow">&#9660;</span>
+          </div>
+          <div class="faq-answer">
+            <p>The scanner focuses on NASDAQ and NYSE-listed stocks in the $1-$20 range with an emphasis on low-float, high-volatility names. It's purpose-built for penny stock and small-cap day traders.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>Ready to find your next trade?</h2>
+      <p>Start your 7-day free trial and scan pre-market movers tomorrow morning.</p>
+      <a href="#" class="btn btn-primary btn-large">Start free trial &mdash; $29/month</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 Sierra Trading. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <!-- Minimal JS: FAQ toggle -->
+  <script>
+    document.querySelectorAll('.faq-question').forEach(function(q) {
+      q.addEventListener('click', function() {
+        this.parentElement.classList.toggle('open');
+      });
+    });
+  </script>
+
+</body>
+</html>
