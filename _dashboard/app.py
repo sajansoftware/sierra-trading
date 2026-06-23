@@ -343,9 +343,278 @@ def inject_theme() -> None:
             text-decoration: none !important;
             display: block;
         }}
+
+        /* ====== REUSABLE CLASS SYSTEM ====== */
+
+        /* Table header cell */
+        .sierra-th {{
+            padding: 10px 12px;
+            border-bottom: 1px solid {BORDER};
+            background: {NAVY_CARD} !important;
+            color: {WHITE} !important;
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: left;
+        }}
+        .sierra-th.text-right {{ text-align: right; }}
+        .sierra-th.text-center {{ text-align: center; }}
+        .sierra-th.wide-pad {{ padding: 10px 14px; }}
+
+        /* Table body cell */
+        .sierra-td {{
+            padding: 9px 12px;
+            border-bottom: 1px solid {BORDER};
+            color: {WHITE_DIM} !important;
+            font-size: 0.9rem;
+            vertical-align: top;
+        }}
+        .sierra-td.text-right {{ text-align: right; }}
+        .sierra-td.text-center {{ text-align: center; }}
+        .sierra-td.narrow {{ font-size: 0.85rem; max-width: 340px; }}
+        .sierra-td.nowrap {{ white-space: nowrap; }}
+        .sierra-td.wide-pad {{ padding: 9px 14px; }}
+
+        /* Badge */
+        .sierra-badge {{
+            display: inline-block;
+            font-weight: 700;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            color: #06121e !important;
+            line-height: 1.4;
+        }}
+        .sierra-badge.sm {{
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }}
+        .sierra-badge.lg {{
+            font-size: 0.78rem;
+            padding: 3px 10px;
+        }}
+
+        /* Ticker link */
+        .sierra-link {{
+            color: {WHITE} !important;
+            font-weight: 700;
+            text-decoration: none !important;
+            border-bottom: 1px dotted {ACCENT};
+        }}
+        .sierra-link:hover {{
+            color: {ACCENT} !important;
+            border-bottom-style: solid;
+        }}
+        .sierra-link-ext {{
+            color: {ACCENT} !important;
+            text-decoration: none;
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }}
+        .sierra-link-ext:hover {{
+            text-decoration: underline !important;
+        }}
+
+        /* Cards */
+        .sierra-card {{
+            background: {NAVY_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            padding: 14px 16px;
+        }}
+        .sierra-card.stat {{ text-align: center; }}
+        .sierra-card .card-label {{
+            font-size: 0.72rem;
+            color: {WHITE_MUTE} !important;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }}
+        .sierra-card .card-value {{
+            font-size: 1.35rem;
+            font-weight: 700;
+        }}
+        .sierra-card.event {{
+            display: flex;
+            gap: 14px;
+            align-items: stretch;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+        }}
+        .sierra-card.theme {{
+            padding: 14px 18px;
+            margin-bottom: 12px;
+        }}
+
+        /* Page header */
+        .sierra-page-header {{
+            margin-bottom: 8px;
+        }}
+        .sierra-page-header .section-label {{
+            font-size: 0.75rem;
+            color: {WHITE_MUTE} !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: block;
+            margin-bottom: 4px;
+        }}
+        .sierra-page-header .page-title {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: {WHITE} !important;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+            line-height: 1.2;
+        }}
+        .sierra-page-header .page-subtitle {{
+            font-size: 0.78rem;
+            color: {WHITE_DIM} !important;
+            margin-bottom: 14px;
+            line-height: 1.55;
+            max-width: 780px;
+        }}
+
+        /* Sidebar branding */
+        .sierra-brand {{
+            padding: 6px 0 14px;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: {WHITE} !important;
+            letter-spacing: -0.3px;
+            border-bottom: 2px solid {ACCENT};
+            margin-bottom: 8px;
+        }}
+        .sierra-nav-section {{
+            font-size: 0.7rem;
+            color: {WHITE_MUTE} !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 18px 0 8px;
+            padding-top: 14px;
+            border-top: 1px solid {BORDER};
+        }}
+
+        /* Sidebar active button */
+        section[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+            box-shadow: inset 3px 0 0 {WHITE};
+        }}
+
+        /* Flex helpers */
+        .sierra-flex-row {{
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }}
+        .sierra-flex-row.spread {{
+            justify-content: space-between;
+        }}
+        .sierra-flex-row.baseline {{
+            align-items: baseline;
+        }}
+
+        /* Spacers */
+        .sierra-spacer {{ height: 18px; }}
+        .sierra-spacer.sm {{ height: 10px; }}
+        .sierra-spacer.lg {{ height: 24px; }}
+
+        /* Text utilities */
+        .text-mute {{ color: {WHITE_MUTE} !important; }}
+        .text-dim {{ color: {WHITE_DIM} !important; }}
+        .text-white {{ color: {WHITE} !important; }}
+        .text-accent {{ color: {ACCENT} !important; }}
+        .text-good {{ color: {GOOD} !important; }}
+        .text-danger {{ color: {DANGER} !important; }}
+        .text-warn {{ color: {WARN} !important; }}
+        .text-xs {{ font-size: 0.68rem; }}
+        .text-sm {{ font-size: 0.78rem; }}
+        .text-md {{ font-size: 0.85rem; }}
+        .text-lg {{ font-size: 1.05rem; }}
+        .text-bold {{ font-weight: 700; }}
+        .text-medium {{ font-weight: 500; }}
+        .text-upper {{ text-transform: uppercase; letter-spacing: 0.5px; }}
+
+        /* Responsive */
+        @media (max-width: 768px) {{
+            .main .block-container {{
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }}
+            .sierra-td, .sierra-th {{
+                padding: 6px 8px;
+                font-size: 0.78rem;
+            }}
+            .sierra-page-header .page-title {{
+                font-size: 1.5rem;
+            }}
+            .sierra-card.event {{
+                flex-direction: column;
+                gap: 8px;
+            }}
+            table.sierra-table {{
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }}
+        }}
+        @media (max-width: 480px) {{
+            .sierra-td.narrow {{ max-width: 200px; }}
+            .sierra-page-header .page-subtitle {{ font-size: 0.72rem; }}
+        }}
         </style>""",
         unsafe_allow_html=True,
     )
+
+
+# =============================================================================
+# UI Helpers
+# =============================================================================
+
+def _page_header(section: str, title: str, subtitle: str = "") -> None:
+    """Render a consistent page header: section label + title + optional subtitle."""
+    sub_html = (
+        f"<div class='page-subtitle'>{subtitle}</div>" if subtitle else ""
+    )
+    st.markdown(
+        f"""<div class='sierra-page-header'>
+          <span class='section-label'>{section}</span>
+          <div class='page-title'>{title}</div>
+          {sub_html}
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+def _badge(label: str, color: str, size: str = "") -> str:
+    """Return HTML for a colored badge. size: '' (default), 'sm', 'lg'."""
+    cls = f"sierra-badge {size}".strip()
+    return f"<span class='{cls}' style='background:{color};'>{label}</span>"
+
+
+def _ticker_link(ticker: str) -> str:
+    """Return HTML for a clickable ticker that opens the catalyst dialog."""
+    return (
+        f"<a href='?ticker={ticker}' target='_self' "
+        f"class='sierra-link'>{ticker}</a>"
+    )
+
+
+def _table_head(columns: list[tuple[str, str]], wide: bool = False) -> str:
+    """Build <thead><tr>…</tr></thead> from [(header_text, alignment), …].
+
+    *alignment*: 'left', 'right', 'center'.
+    *wide*: use wider IPO-style padding.
+    """
+    pad_cls = " wide-pad" if wide else ""
+    cells = "".join(
+        f"<th class='sierra-th{pad_cls} text-{align}'>{h}</th>"
+        for h, align in columns
+    )
+    return f"<thead><tr>{cells}</tr></thead>"
 
 
 # =============================================================================
@@ -396,11 +665,7 @@ def quotes_to_df(rows: list[Quote], info: dict) -> pd.DataFrame:
             company = ""
         # Same-window link: only this cell is clickable, so clicking
         # anywhere else in the row does nothing.
-        ticker_link = (
-            f"<a href='?ticker={q.ticker}' target='_self' "
-            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
-            f"border-bottom:1px dotted {ACCENT};'>{q.ticker}</a>"
-        )
+        ticker_link = _ticker_link(q.ticker)
         out.append({
             "Ticker":      ticker_link,
             "Close":       q.close,
@@ -574,17 +839,11 @@ def catalyst_dialog(ticker: str) -> None:
             st.rerun()
         return
 
-    head_cells = "".join(
-        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Date","left"), ("PM Low","right"), ("PM High","right"),
-            ("Upside","right"), ("Type","left"),
-            ("Catalyst","left"), ("Source","center"),
-        ]
-    )
+    thead = _table_head([
+        ("Date", "left"), ("PM Low", "right"), ("PM High", "right"),
+        ("Upside", "right"), ("Type", "left"),
+        ("Catalyst", "left"), ("Source", "center"),
+    ])
 
     SENT_COLOR = {
         "Bullish": "#22c55e",
@@ -597,21 +856,13 @@ def catalyst_dialog(ticker: str) -> None:
         date_str = r["date"].strftime("%b %d, %Y")
         type_label = r.get("type") or "News"
         type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
-        )
+        type_badge = _badge(type_label, type_col)
         sent_label = r.get("sentiment") or "Neutral"
         sent_col = SENT_COLOR.get(sent_label, "#64748b")
-        sent_badge = (
-            f"<span style='background:{sent_col};color:#06121e;"
-            f"font-weight:700;font-size:0.7rem;padding:2px 10px;"
-            f"border-radius:4px;white-space:nowrap;'>{sent_label}</span>"
-        )
+        sent_badge = _badge(sent_label, sent_col)
         catalyst_text = (
             r["title"] if r["title"]
-            else f"<span style='color:#64748b;'>—</span>"
+            else "<span class='text-mute'>—</span>"
         )
         # Source cell: primary source link + secondary source corroboration
         # OR an explicit Unverified badge when only one source is available.
@@ -621,25 +872,22 @@ def catalyst_dialog(ticker: str) -> None:
         if r["link"] and primary_source != "—":
             primary_html = (
                 f"<a href='{r['link']}' target='_blank' "
-                f"style='color:{ACCENT};text-decoration:none;font-size:0.78rem;"
-                f"white-space:nowrap;'>{primary_source} ↗</a>"
+                f"class='sierra-link-ext'>{primary_source} ↗</a>"
             )
         else:
             primary_html = (
-                f"<span style='color:#64748b;font-size:0.78rem;'>"
+                f"<span class='text-mute text-sm'>"
                 f"{primary_source}</span>"
             )
         if unverified:
             verify_html = (
-                f"<div style='margin-top:2px;display:inline-block;"
-                f"background:#f97316;color:#06121e;font-weight:700;"
-                f"font-size:0.65rem;padding:1px 6px;border-radius:3px;"
-                f"text-transform:uppercase;'>Unverified</div>"
+                f"<div style='margin-top:2px;'>"
+                f"{_badge('Unverified', '#f97316', 'sm')}</div>"
             )
         elif secondary:
             verify_html = (
-                f"<div style='margin-top:2px;color:{WHITE_MUTE};"
-                f"font-size:0.7rem;'>+ {secondary}</div>"
+                f"<div style='margin-top:2px;' class='text-mute text-xs'>"
+                f"+ {secondary}</div>"
             )
         else:
             verify_html = ""
@@ -650,15 +898,15 @@ def catalyst_dialog(ticker: str) -> None:
         pm_low = r.get("pm_low")
         pm_low_time = r.get("pm_low_time") or ""
         pm_low_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>${pm_low:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{pm_low_time}</div>"
+            f"<div class='text-dim text-medium'>${pm_low:.2f}</div>"
+            + (f"<div class='text-mute text-xs'>{pm_low_time}</div>"
                if pm_low_time else "")
             if pm_low is not None
-            else f"<div style='color:#64748b;'>—</div>"
+            else "<div class='text-mute'>—</div>"
         )
         pm_high_cell = (
-            f"<div style='color:{WHITE};font-weight:600;'>${r['pm_high']:.2f}</div>"
-            f"<div style='color:{WHITE_MUTE};font-size:0.72rem;'>{r['pm_high_time']}</div>"
+            f"<div class='text-white text-bold'>${r['pm_high']:.2f}</div>"
+            f"<div class='text-mute text-xs'>{r['pm_high_time']}</div>"
         )
         # TradingView deep-link: 5m chart at the symbol. URL hash carries
         # the PM-low date + time so the user knows where to scroll on
@@ -674,34 +922,27 @@ def catalyst_dialog(ticker: str) -> None:
                  (f"Open {ticker} on TradingView 5m — {date_str}")
         row_link_open = (
             f"<a href='{tv_url}' target='_blank' "
-            f"title='{tv_tip}' "
-            f"style='display:block;color:inherit;text-decoration:none;'>"
+            f"title='{tv_tip}'>"
         )
         row_link_close = "</a>"
         body_rows.append(
             f"<tr class='sierra-clickable'>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};font-weight:500;white-space:nowrap;vertical-align:top;'>"
+            f"<td class='sierra-td nowrap text-white text-medium'>"
             f"{row_link_open}📈 {date_str}{row_link_close}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{row_link_open}{pm_low_cell}{row_link_close}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{row_link_open}{pm_high_cell}{row_link_close}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{up_color};text-align:right;font-weight:700;vertical-align:top;'>"
+            f"<td class='sierra-td text-right'>{row_link_open}{pm_low_cell}{row_link_close}</td>"
+            f"<td class='sierra-td text-right'>{row_link_open}{pm_high_cell}{row_link_close}</td>"
+            f"<td class='sierra-td text-right text-bold' style='color:{up_color};'>"
             f"{row_link_open}<span style='color:{up_color};'>+{up:.1f}%</span>{row_link_close}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;vertical-align:top;'>"
-            f"{row_link_open}<span style='color:{WHITE_DIM};'>{catalyst_text}</span>{row_link_close}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;vertical-align:top;'>{source_html}</td>"
+            f"<td class='sierra-td'>{type_badge}</td>"
+            f"<td class='sierra-td narrow'>"
+            f"{row_link_open}{catalyst_text}{row_link_close}</td>"
+            f"<td class='sierra-td text-center'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
         f"""<table class='sierra-table'>
-          <thead><tr>{head_cells}</tr></thead>
+          {thead}
           <tbody>{''.join(body_rows)}</tbody>
         </table>""",
         unsafe_allow_html=True,
@@ -721,13 +962,13 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
     para, areas = load_description_parts(dir_path)
     if para:
         st.markdown(
-            f"<div style='color:{WHITE_DIM};font-size:0.9rem;"
+            f"<div class='text-dim' style='font-size:0.9rem;"
             f"line-height:1.6;margin-bottom:14px;'>{para}</div>",
             unsafe_allow_html=True,
         )
     if areas:
         items = "".join(
-            f"<li style='color:{WHITE};margin-bottom:4px;'>{a}</li>"
+            f"<li class='text-white' style='margin-bottom:4px;'>{a}</li>"
             for a in areas
         )
         st.markdown(
@@ -738,7 +979,7 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
 
     st.markdown(
         f"""<div style="margin-bottom:10px;">
-          <span style="font-size:1.05rem;font-weight:600;color:{WHITE};">
+          <span class='text-lg text-bold text-white'>
             Candidates ({len(rows)})
           </span>
         </div>""",
@@ -758,27 +999,16 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
 # =============================================================================
 def _stat_card(label: str, value: str, color: str) -> None:
     st.markdown(
-        f"""<div style="background:{NAVY_CARD};border:1px solid {BORDER};
-            border-radius:6px;padding:14px 16px;text-align:center;">
-          <div style="font-size:0.72rem;color:{WHITE_MUTE};
-              text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
-              {label}</div>
-          <div style="font-size:1.35rem;font-weight:700;color:{color};">{value}</div>
+        f"""<div class='sierra-card stat'>
+          <div class='card-label'>{label}</div>
+          <div class='card-value' style='color:{color};'>{value}</div>
         </div>""",
         unsafe_allow_html=True,
     )
 
 
 def render_journal() -> None:
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Trading Journal</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:20px;">Performance Dashboard</div>""",
-        unsafe_allow_html=True,
-    )
+    _page_header("Trading Journal", "Performance Dashboard")
 
     trades = trading_journal.load_trades()
     stats = trading_journal.calculate_stats(trades)
@@ -798,7 +1028,7 @@ def render_journal() -> None:
         sign = "+" if stats["avg_pnl"] >= 0 else ""
         _stat_card("Avg P&L", f"{sign}${stats['avg_pnl']:,.2f}", col)
 
-    st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='sierra-spacer'></div>", unsafe_allow_html=True)
 
     with st.expander("Add new trade", expanded=not trades):
         with st.form("trade_form", clear_on_submit=True):
@@ -897,12 +1127,10 @@ def changelog_dialog() -> None:
     events = recent_events(limit=10)
 
     st.markdown(
-        f"""<div style="margin-bottom:10px;">
-          <div style="font-size:0.78rem;color:{WHITE_DIM};line-height:1.5;">
-            Tracks tickers entering or exiting the screen
-            (<b>${MIN_PRICE:.0f}–${MAX_PRICE:.0f}</b> &middot;
-            <b>float &lt; 20M</b>). Updated each time a sector loads.
-          </div>
+        f"""<div class='text-sm text-dim' style='margin-bottom:10px;line-height:1.5;'>
+          Tracks tickers entering or exiting the screen
+          (<b>${MIN_PRICE:.0f}\u2013${MAX_PRICE:.0f}</b> &middot;
+          <b>float &lt; 20M</b>). Updated each time a sector loads.
         </div>""",
         unsafe_allow_html=True,
     )
@@ -944,27 +1172,20 @@ def changelog_dialog() -> None:
         meta_str = " &middot; ".join(meta_bits) if meta_bits else "&nbsp;"
 
         cards.append(
-            f"""<div style="display:flex;gap:14px;align-items:stretch;
-                 background:{NAVY_CARD};border:1px solid {BORDER};
-                 border-left:4px solid {accent_col};border-radius:8px;
-                 padding:12px 14px;margin-bottom:10px;">
+            f"""<div class='sierra-card event' style='border-left:4px solid {accent_col};'>
               <div style="flex:0 0 84px;">
-                <div style="font-size:0.65rem;font-weight:700;
-                  letter-spacing:1px;color:{accent_col};
-                  background:{accent_bg};border-radius:4px;
-                  padding:3px 6px;text-align:center;
-                  margin-bottom:6px;">{glyph}</div>
-                <div style="font-size:1.05rem;font-weight:700;
-                  color:{WHITE};letter-spacing:-0.3px;">{sym}</div>
+                <div class='sierra-badge sm' style='background:{accent_bg};
+                  color:{accent_col} !important;text-align:center;
+                  margin-bottom:6px;display:block;'>{glyph}</div>
+                <div class='text-lg text-bold text-white'
+                  style='letter-spacing:-0.3px;'>{sym}</div>
               </div>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:0.7rem;color:{WHITE_MUTE};
-                  text-transform:uppercase;letter-spacing:0.5px;
-                  margin-bottom:4px;">{sector} &middot; {ts}</div>
-                <div style="font-size:0.88rem;color:{WHITE_DIM};
-                  line-height:1.45;margin-bottom:4px;">{reason}</div>
-                <div style="font-size:0.72rem;color:{WHITE_MUTE};">
-                  {meta_str}</div>
+                <div class='text-xs text-mute text-upper'
+                  style='margin-bottom:4px;'>{sector} &middot; {ts}</div>
+                <div class='text-md text-dim'
+                  style='line-height:1.45;margin-bottom:4px;'>{reason}</div>
+                <div class='text-xs text-mute'>{meta_str}</div>
               </div>
             </div>"""
         )
@@ -1022,49 +1243,34 @@ def _render_movers_table(movers: list[dict],
         except Exception:
             return sub_key.replace("_", " ")
 
-    head_cells = "".join(
-        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Ticker","left"), ("Sector","left"), ("Country","left"),
-            ("Ref Price","right"),    # price at window-open (7:00 or 4:00)
-            ("PM High","right"),       # peak hit in window
-            ("Move","right"),          # gain from ref
-            ("Type","left"),
-            ("Catalyst","left"), ("Source","center"),
-        ]
-    )
+    thead = _table_head([
+        ("Ticker", "left"), ("Sector", "left"), ("Country", "left"),
+        ("Ref Price", "right"),     # price at window-open (7:00 or 4:00)
+        ("PM High", "right"),       # peak hit in window
+        ("Move", "right"),          # gain from ref
+        ("Type", "left"),
+        ("Catalyst", "left"), ("Source", "center"),
+    ])
 
     body_rows = []
     for r in movers:
-        ticker_html = (
-            f"<a href='?ticker={r['ticker']}' target='_self' "
-            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
-            f"border-bottom:1px dotted {ACCENT};'>{r['ticker']}</a>"
-        )
+        ticker_html = _ticker_link(r["ticker"])
         type_label = r["news_type"]
         type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.7rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
-        )
+        type_badge = _badge(type_label, type_col)
         catalyst_text = (
             r["news_title"] if r["news_title"]
-            else f"<span style='color:#64748b;'>—</span>"
+            else "<span class='text-mute'>\u2014</span>"
         )
-        source_label = r.get("news_source") or "—"
-        if r["news_link"] and source_label != "—":
+        source_label = r.get("news_source") or "\u2014"
+        if r["news_link"] and source_label != "\u2014":
             source_html = (
                 f"<a href='{r['news_link']}' target='_blank' "
-                f"style='color:{ACCENT};text-decoration:none;"
-                f"font-size:0.78rem;white-space:nowrap;'>{source_label} ↗</a>"
+                f"class='sierra-link-ext'>{source_label} \u2197</a>"
             )
         else:
             source_html = (
-                f"<span style='color:#64748b;font-size:0.78rem;'>"
+                f"<span class='text-mute text-sm'>"
                 f"{source_label}</span>"
             )
         move = r["move_pct"]
@@ -1084,60 +1290,51 @@ def _render_movers_table(movers: list[dict],
             sec, sub = cls
             sub_label = _human_sub_label(sec, sub)
             sector_html = (
-                f"<div style='color:{WHITE};font-size:0.82rem;"
-                f"font-weight:600;line-height:1.25;'>{sec}</div>"
-                f"<div style='color:{WHITE_MUTE};font-size:0.7rem;"
-                f"line-height:1.25;'>{sub_label}</div>"
+                f"<div class='text-white text-bold' "
+                f"style='font-size:0.82rem;line-height:1.25;'>{sec}</div>"
+                f"<div class='text-mute text-xs' "
+                f"style='line-height:1.25;'>{sub_label}</div>"
             )
         else:
-            sector_html = f"<span style='color:#64748b;'>—</span>"
+            sector_html = "<span class='text-mute'>\u2014</span>"
 
-        country_val = r.get("country") or "—"
+        country_val = r.get("country") or "\u2014"
         country_html = (
-            f"<span style='color:{WHITE_DIM};font-size:0.82rem;'>"
+            f"<span class='text-dim' style='font-size:0.82rem;'>"
             f"{country_val}</span>"
         )
 
         ref_time = r.get("ref_time") or ""
         high_time = r.get("high_time") or ""
         ref_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>${r['lod']:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{ref_time}</div>"
+            f"<div class='text-dim text-medium'>${r['lod']:.2f}</div>"
+            + (f"<div class='text-mute text-xs'>{ref_time}</div>"
                if ref_time else "")
         )
         high_cell = (
-            f"<div style='color:{WHITE};font-weight:600;'>${r['hod']:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{high_time}</div>"
+            f"<div class='text-white text-bold'>${r['hod']:.2f}</div>"
+            + (f"<div class='text-mute text-xs'>{high_time}</div>"
                if high_time else "")
         )
 
         body_rows.append(
             f"<tr>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{ticker_html}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{sector_html}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{country_html}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{ref_cell}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{high_cell}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{move_color};text-align:right;font-weight:700;vertical-align:top;'>+{move:.1f}%</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.85rem;max-width:340px;"
-            f"vertical-align:top;'>{catalyst_text}</td>"
-            f"<td style='padding:9px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;vertical-align:top;'>{source_html}</td>"
+            f"<td class='sierra-td'>{ticker_html}</td>"
+            f"<td class='sierra-td'>{sector_html}</td>"
+            f"<td class='sierra-td'>{country_html}</td>"
+            f"<td class='sierra-td text-right'>{ref_cell}</td>"
+            f"<td class='sierra-td text-right'>{high_cell}</td>"
+            f"<td class='sierra-td text-right text-bold' "
+            f"style='color:{move_color};'>+{move:.1f}%</td>"
+            f"<td class='sierra-td'>{type_badge}</td>"
+            f"<td class='sierra-td narrow'>{catalyst_text}</td>"
+            f"<td class='sierra-td text-center'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
         f"""<table class='sierra-table'>
-          <thead><tr>{head_cells}</tr></thead>
+          {thead}
           <tbody>{''.join(body_rows)}</tbody>
         </table>""",
         unsafe_allow_html=True,
@@ -1282,20 +1479,13 @@ def _top_movers_fragment(
 def render_top_movers() -> None:
     _title_col, _sound_col = st.columns([20, 1])
     with _title_col:
-        st.markdown(
-            f"""<div style="margin-bottom:8px;">
-              <span style="font-size:0.75rem;color:{WHITE_MUTE};
-                text-transform:uppercase;letter-spacing:1px;">Top Moves</span>
-            </div>
-            <div style="font-size:2rem;font-weight:700;color:{WHITE};
-              letter-spacing:-0.5px;margin-bottom:4px;">Today's Top Moves</div>
-            <div style="font-size:0.78rem;color:{WHITE_DIM};
-              margin-bottom:14px;">Criteria: price $1–$20 &middot; float
-              &lt; 20M. Logged anytime within the window the stock is
-              up ≥10% from its window-open price (7:00 AM for main,
-              4:00 AM for early). A stock that pops in both windows
-              appears in both tabs.</div>""",
-            unsafe_allow_html=True,
+        _page_header(
+            "Top Moves",
+            "Today's Top Moves",
+            "Criteria: price $1\u201320 &middot; float &lt; 20M. Logged anytime "
+            "within the window the stock is up \u226510% from its window-open "
+            "price (7:00 AM for main, 4:00 AM for early). A stock that pops "
+            "in both windows appears in both tabs.",
         )
     with _sound_col:
         st.toggle(
@@ -1343,17 +1533,10 @@ def render_penny_watchlist() -> None:
     with st.spinner("Loading penny candidates…"):
         rows = fetch_penny_candidates()
 
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Penny Watchlist</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:4px;">Penny Watchlist</div>
-        <div style="font-size:0.78rem;color:{WHITE_DIM};
-          margin-bottom:14px;">Sub-$1 universe &middot; float &lt; 20M
-          &middot; candidates: {len(rows):,}</div>""",
-        unsafe_allow_html=True,
+    _page_header(
+        "Penny Watchlist",
+        "Penny Watchlist",
+        f"Sub-$1 universe &middot; float &lt; 20M &middot; candidates: {len(rows):,}",
     )
 
     if not rows:
@@ -1371,18 +1554,12 @@ _THEME_COLORS = ["#64b5f6", "#22c55e", "#facc15", "#f97316", "#a78bfa"]
 
 
 def render_stan_research() -> None:
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Stan / Research</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">Market Themes</div>
-        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:18px;">
-          Stan scans the universe for emerging themes by clustering today's
-          catalysts and sector momentum. Each theme card shows the catalyst
-          type, supporting tickers, and top headlines.</div>""",
-        unsafe_allow_html=True,
+    _page_header(
+        "Stan / Research",
+        "Market Themes",
+        "Stan scans the universe for emerging themes by clustering today\u2019s "
+        "catalysts and sector momentum. Each theme card shows the catalyst "
+        "type, supporting tickers, and top headlines.",
     )
 
     with st.spinner("Stan is scanning for market themes…"):
@@ -1412,18 +1589,16 @@ def render_stan_research() -> None:
             sign = "+" if chg > 0 else ""
             perf_items.append(
                 f"<span style='margin-right:16px;white-space:nowrap;'>"
-                f"<span style='color:{WHITE_DIM};font-size:0.78rem;'>"
+                f"<span class='text-sm text-dim'>"
                 f"{sp.get('sector', '')}</span> "
-                f"<span style='color:{color};font-weight:600;"
-                f"font-size:0.78rem;'>{sign}{chg:.1f}%</span></span>"
+                f"<span class='text-sm text-bold' style='color:{color};'>"
+                f"{sign}{chg:.1f}%</span></span>"
             )
         st.markdown(
-            f"<div style='background:{NAVY_CARD};border:1px solid {BORDER};"
-            f"border-radius:6px;padding:10px 14px;margin-bottom:18px;"
-            f"overflow-x:auto;white-space:nowrap;'>"
-            f"<div style='font-size:0.65rem;color:{WHITE_MUTE};"
-            f"text-transform:uppercase;letter-spacing:1px;"
-            f"margin-bottom:6px;'>Sector Performance</div>"
+            f"<div class='sierra-card' style='overflow-x:auto;"
+            f"white-space:nowrap;margin-bottom:18px;'>"
+            f"<div class='text-xs text-mute text-upper'"
+            f" style='margin-bottom:6px;'>Sector Performance</div>"
             f"{''.join(perf_items)}</div>",
             unsafe_allow_html=True,
         )
@@ -1442,16 +1617,15 @@ def render_stan_research() -> None:
         color = _THEME_COLORS[i % len(_THEME_COLORS)]
         ticker_links = " ".join(
             f"<a href='?ticker={t}' target='_self' "
-            f"style='color:{ACCENT};text-decoration:none;"
-            f"font-weight:600;font-size:0.82rem;"
-            f"border-bottom:1px dotted {ACCENT};margin-right:8px;'>{t}</a>"
+            f"class='sierra-link' style='margin-right:8px;"
+            f"font-size:0.82rem;'>{t}</a>"
             for t in theme.tickers
         )
         headlines_html = ""
         if theme.headlines:
             items = "".join(
-                f"<li style='color:{WHITE_DIM};font-size:0.78rem;"
-                f"margin-bottom:3px;'>{h}</li>"
+                f"<li class='text-sm text-dim'"
+                f" style='margin-bottom:3px;'>{h}</li>"
                 for h in theme.headlines[:4]
             )
             headlines_html = (
@@ -1459,29 +1633,24 @@ def render_stan_research() -> None:
                 f"{items}</ul>"
             )
 
-        catalyst_badge = (
-            f"<span style='background:{CATALYST_TYPE_COLOR.get(theme.catalyst_type, WHITE_MUTE)};"
-            f"color:#06121e;font-weight:700;font-size:0.68rem;"
-            f"padding:2px 8px;border-radius:4px;margin-left:10px;'>"
-            f"{theme.catalyst_type}</span>"
+        catalyst_badge = _badge(
+            theme.catalyst_type,
+            CATALYST_TYPE_COLOR.get(theme.catalyst_type, WHITE_MUTE),
         )
 
         st.markdown(
-            f"""<div style='border-left:4px solid {color};
-              background:{NAVY_CARD};border:1px solid {BORDER};
-              border-left:4px solid {color};border-radius:8px;
-              padding:14px 18px;margin-bottom:12px;'>
-              <div style='display:flex;justify-content:space-between;
-                align-items:center;margin-bottom:6px;'>
-                <span style='font-size:1.05rem;font-weight:700;
-                  color:{WHITE};'>#{theme.rank} {theme.name}</span>
-                {catalyst_badge}
+            f"""<div class='sierra-card theme'
+              style='border-left:4px solid {color};'>
+              <div class='sierra-flex-row spread'
+                style='margin-bottom:6px;'>
+                <span class='text-lg text-bold text-white'>
+                  #{theme.rank} {theme.name}</span>
+                <span style='margin-left:10px;'>{catalyst_badge}</span>
               </div>
-              <div style='color:{WHITE_DIM};font-size:0.85rem;
-                margin-bottom:8px;'>{theme.description}</div>
+              <div class='text-md text-dim'
+                style='margin-bottom:8px;'>{theme.description}</div>
               <div style='margin-bottom:4px;'>
-                <span style='font-size:0.68rem;color:{WHITE_MUTE};
-                  text-transform:uppercase;letter-spacing:0.5px;'>
+                <span class='text-xs text-mute text-upper'>
                   Tickers:</span> {ticker_links}
               </div>
               {headlines_html}
@@ -1529,23 +1698,14 @@ def _ipo_row(ipo: IPO) -> str:
     exch = ipo.exchange or "—"
     return (
         f"<tr>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE};font-weight:700;'>{ipo.ticker}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE_DIM};'>{ipo.company}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE};text-align:right;font-weight:600;'>{ipo.price_display}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE};font-weight:500;'>{date_str}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE_DIM};text-align:right;'>{shares}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE_DIM};text-align:right;'>{deal}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};"
-        f"color:{WHITE_MUTE};'>{exch}</td>"
-        f"<td style='padding:9px 14px;border-bottom:1px solid {BORDER};'>"
-        f"<span style='background:{status_col};color:#06121e;font-weight:700;"
-        f"font-size:0.7rem;padding:3px 8px;border-radius:4px;'>{ipo.status}</span></td>"
+        f"<td class='sierra-td wide-pad text-bold'>{ipo.ticker}</td>"
+        f"<td class='sierra-td wide-pad text-dim'>{ipo.company}</td>"
+        f"<td class='sierra-td wide-pad text-right' style='font-weight:600;'>{ipo.price_display}</td>"
+        f"<td class='sierra-td wide-pad' style='font-weight:500;'>{date_str}</td>"
+        f"<td class='sierra-td wide-pad text-dim text-right'>{shares}</td>"
+        f"<td class='sierra-td wide-pad text-dim text-right'>{deal}</td>"
+        f"<td class='sierra-td wide-pad text-mute'>{exch}</td>"
+        f"<td class='sierra-td wide-pad'>{_badge(ipo.status, status_col, 'lg')}</td>"
         f"</tr>"
     )
 
@@ -1555,9 +1715,8 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
     st.markdown(
         f"""<div style="display:flex;align-items:baseline;gap:10px;
             margin:22px 0 10px;">
-          <span style="background:{badge};color:#06121e;font-weight:700;
-            padding:3px 10px;border-radius:4px;font-size:0.78rem;">{sector}</span>
-          <span style="color:{WHITE_MUTE};font-size:0.8rem;">{len(rows)} IPO(s)</span>
+          {_badge(sector, badge, "lg")}
+          <span class="text-mute text-sm">{len(rows)} IPO(s)</span>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -1570,21 +1729,15 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
         )
         return
 
-    head_cells = "".join(
-        f"<th style='padding:10px 14px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Ticker","left"), ("Company","left"), ("Price","right"),
-            ("Expected Date","left"), ("Shares","right"), ("Deal Size","right"),
-            ("Exch","left"), ("Status","left"),
-        ]
-    )
+    thead = _table_head([
+        ("Ticker", "left"), ("Company", "left"), ("Price", "right"),
+        ("Expected Date", "left"), ("Shares", "right"), ("Deal Size", "right"),
+        ("Exch", "left"), ("Status", "left"),
+    ], wide=True)
     body = "".join(_ipo_row(r) for r in rows)
     st.markdown(
         f"""<table class="sierra-table">
-          <thead><tr>{head_cells}</tr></thead>
+          {thead}
           <tbody>{body}</tbody>
         </table>""",
         unsafe_allow_html=True,
@@ -1599,21 +1752,14 @@ def render_backtesting() -> None:
         list_moves, stats as bt_stats, MIN_MOVE_PCT, LOOKBACK_DAYS,
     )
 
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">Backtesting</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:6px;">≥100% Pre-Market Moves</div>
-        <div style="font-size:0.85rem;color:{WHITE_DIM};margin-bottom:14px;
-          max-width:780px;line-height:1.55;">
-          Every ticker-day in the past six months — across the full
-          US-listed universe — where the pre-market window
-          (4:00–9:29 AM ET) doubled or better from PM low to PM high.
-          Sorted most-recent first. Click any ticker to open the
-          catalysts dialog.</div>""",
-        unsafe_allow_html=True,
+    _page_header(
+        "Backtesting",
+        "\u2265100% Pre-Market Moves",
+        "Every ticker-day in the past six months \u2014 across the full "
+        "US-listed universe \u2014 where the pre-market window "
+        "(4:00\u20139:29 AM ET) doubled or better from PM low to PM high. "
+        "Sorted most-recent first. Click any ticker to open the "
+        "catalysts dialog.",
     )
 
     s = bt_stats()
@@ -1648,27 +1794,20 @@ def render_backtesting() -> None:
     status_color = ACCENT if in_prog else GOOD
     status_label = "RUNNING" if in_prog else "IDLE"
 
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _stat_card("Status", status_label, status_color)
+    with c2:
+        _stat_card("Moves Logged", f"{len(moves):,}", WHITE)
+    with c3:
+        _stat_card("Tickers w/ 100%+", f"{s.get('tickers_with_moves', 0):,}", ACCENT)
+    with c4:
+        _stat_card("Reviewed", f"{s.get('reviewed_moves', 0):,}", WHITE_DIM)
     st.markdown(
-        f"""<div style="display:flex;gap:24px;margin-bottom:6px;
-          flex-wrap:wrap;align-items:center;">
-          <span style="font-size:0.66rem;font-weight:700;color:{status_color};
-            background:rgba(100,181,246,0.12);padding:3px 8px;
-            border-radius:4px;letter-spacing:1px;">{status_label}</span>
-          <span style="color:{WHITE};font-weight:600;">
-            Moves logged: {len(moves):,}</span>
-          <span style="color:{WHITE_DIM};">
-            Tickers with ≥100% moves: {s.get('tickers_with_moves', 0):,}</span>
-          <span style="color:{WHITE_DIM};">
-            Reviewed: {s.get('reviewed_moves', 0):,}</span>
-          <span style="color:{WHITE_DIM};">
-            Coverage: {s.get('earliest_date') or '—'} → {s.get('latest_date') or '—'}</span>
-        </div>
-        <div style="display:flex;gap:24px;margin-bottom:18px;
-          flex-wrap:wrap;font-size:0.78rem;color:{WHITE_MUTE};">
-          <span>Universe scanned this run: {done:,} / {to_scan:,}
-            ({pct:.0f}%)</span>
-          <span>Total tickers in database: {universe:,}</span>
-          <span>Last run: {s.get('last_run_ts') or '—'}</span>
+        f"""<div class='sierra-flex-row' style='margin:10px 0 18px;font-size:0.78rem;'>
+          <span class='text-mute'>Coverage: {s.get('earliest_date') or '\u2014'} \u2192 {s.get('latest_date') or '\u2014'}</span>
+          <span class='text-mute'>Scanned: {done:,} / {to_scan:,} ({pct:.0f}%)</span>
+          <span class='text-mute'>Last run: {s.get('last_run_ts') or '\u2014'}</span>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -1690,23 +1829,17 @@ def render_backtesting() -> None:
             )
         return
 
-    head_cells = "".join(
-        f"<th style='padding:10px 12px;border-bottom:1px solid {BORDER};"
-        f"background:{NAVY_CARD} !important;color:{WHITE};font-weight:600;"
-        f"font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;"
-        f"text-align:{align};'>{h}</th>"
-        for h, align in [
-            ("Date",      "left"),
-            ("Ticker",    "left"),
-            ("Sector",    "left"),
-            ("PM Low",    "right"),
-            ("PM High",   "right"),
-            ("PM Move",   "right"),
-            ("Type",      "left"),
-            ("Catalyst",  "left"),
-            ("Source",    "center"),
-        ]
-    )
+    thead = _table_head([
+        ("Date",      "left"),
+        ("Ticker",    "left"),
+        ("Sector",    "left"),
+        ("PM Low",    "right"),
+        ("PM High",   "right"),
+        ("PM Move",   "right"),
+        ("Type",      "left"),
+        ("Catalyst",  "left"),
+        ("Source",    "center"),
+    ])
 
     body_rows = []
     for r in moves:
@@ -1729,60 +1862,51 @@ def render_backtesting() -> None:
         else:
             move_color = ACCENT
 
-        ticker_html = (
-            f"<a href='?ticker={sym}' target='_self' "
-            f"style='color:{WHITE};font-weight:700;text-decoration:none;"
-            f"border-bottom:1px dotted {ACCENT};'>{sym}</a>"
-        )
+        ticker_html = _ticker_link(sym)
 
-        cls = sector_lookup.get(sym)
-        if cls:
-            sec, sub = cls
+        sec_cls = sector_lookup.get(sym)
+        if sec_cls:
+            sec, sub = sec_cls
             sub_label = _human_sub_label(sec, sub)
             sector_html = (
-                f"<div style='color:{WHITE};font-size:0.8rem;"
-                f"font-weight:600;line-height:1.25;'>{sec}</div>"
-                f"<div style='color:{WHITE_MUTE};font-size:0.68rem;"
-                f"line-height:1.25;'>{sub_label}</div>"
+                f"<div class='text-bold' style='font-size:0.8rem;"
+                f"line-height:1.25;color:{WHITE};'>{sec}</div>"
+                f"<div class='text-mute text-xs' "
+                f"style='line-height:1.25;'>{sub_label}</div>"
             )
         else:
-            sector_html = f"<span style='color:#64748b;'>—</span>"
+            sector_html = "<span class='text-mute'>\u2014</span>"
 
         pm_low_cell = (
-            f"<div style='color:{WHITE_DIM};font-weight:500;'>"
+            f"<div class='text-dim' style='font-weight:500;'>"
             f"${pm_low:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_low_time}</div>"
+            + (f"<div class='text-mute text-xs'>{pm_low_time}</div>"
                if pm_low_time else "")
-        ) if pm_low else f"<span style='color:#64748b;'>—</span>"
+        ) if pm_low else "<span class='text-mute'>\u2014</span>"
 
         pm_high_cell = (
-            f"<div style='color:{WHITE};font-weight:600;'>${pm_high:.2f}</div>"
-            + (f"<div style='color:{WHITE_MUTE};font-size:0.68rem;'>{pm_high_time}</div>"
+            f"<div class='text-bold' style='color:{WHITE};'>${pm_high:.2f}</div>"
+            + (f"<div class='text-mute text-xs'>{pm_high_time}</div>"
                if pm_high_time else "")
-        ) if pm_high else f"<span style='color:#64748b;'>—</span>"
+        ) if pm_high else "<span class='text-mute'>\u2014</span>"
 
-        type_label = r.get("type") or "—"
+        type_label = r.get("type") or "\u2014"
         type_col = CATALYST_TYPE_COLOR.get(type_label, WHITE_MUTE)
-        type_badge = (
-            f"<span style='background:{type_col};color:#06121e;"
-            f"font-weight:700;font-size:0.68rem;padding:2px 8px;"
-            f"border-radius:4px;white-space:nowrap;'>{type_label}</span>"
-        )
+        type_badge = _badge(type_label, type_col)
 
         title = r.get("title") or ""
-        catalyst_text = title if title else f"<span style='color:#64748b;'>—</span>"
+        catalyst_text = title if title else "<span class='text-mute'>\u2014</span>"
 
-        src = r.get("source") or "—"
+        src = r.get("source") or "\u2014"
         link = r.get("link") or ""
-        if link and src != "—":
+        if link and src != "\u2014":
             source_link_html = (
                 f"<a href='{link}' target='_blank' "
-                f"style='color:{ACCENT};text-decoration:none;"
-                f"font-size:0.76rem;white-space:nowrap;'>{src} ↗</a>"
+                f"class='sierra-link-ext'>{src} \u2197</a>"
             )
         else:
             source_link_html = (
-                f"<span style='color:#64748b;font-size:0.76rem;'>{src}</span>"
+                f"<span class='text-mute text-sm'>{src}</span>"
             )
 
         # Clickable reviewed-toggle next to the source. Filled green
@@ -1807,36 +1931,26 @@ def render_backtesting() -> None:
             )
         source_html = check_html + source_link_html
 
-        row_opacity = "opacity:0.55;" if reviewed else ""
+        row_opacity = "style='opacity:0.55;'" if reviewed else ""
         body_rows.append(
-            f"<tr style='{row_opacity}'>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE};font-weight:500;white-space:nowrap;"
-            f"vertical-align:top;'>{date_str}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{ticker_html}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{sector_html}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_low_cell}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:right;vertical-align:top;'>{pm_high_cell}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{move_color};text-align:right;font-weight:700;"
-            f"vertical-align:top;'>+{upside:.1f}%</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"vertical-align:top;'>{type_badge}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"color:{WHITE_DIM};font-size:0.82rem;max-width:340px;"
-            f"vertical-align:top;'>{catalyst_text}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid {BORDER};"
-            f"text-align:center;vertical-align:top;white-space:nowrap;'>{source_html}</td>"
+            f"<tr {row_opacity}>"
+            f"<td class='sierra-td nowrap' style='color:{WHITE};"
+            f"font-weight:500;'>{date_str}</td>"
+            f"<td class='sierra-td'>{ticker_html}</td>"
+            f"<td class='sierra-td'>{sector_html}</td>"
+            f"<td class='sierra-td text-right'>{pm_low_cell}</td>"
+            f"<td class='sierra-td text-right'>{pm_high_cell}</td>"
+            f"<td class='sierra-td text-right text-bold' style='color:{move_color};'>"
+            f"+{upside:.1f}%</td>"
+            f"<td class='sierra-td'>{type_badge}</td>"
+            f"<td class='sierra-td narrow'>{catalyst_text}</td>"
+            f"<td class='sierra-td text-center nowrap'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
         f"<table class='sierra-table'>"
-        f"<thead><tr>{head_cells}</tr></thead>"
+        f"{thead}"
         f"<tbody>{''.join(body_rows)}</tbody></table>",
         unsafe_allow_html=True,
     )
@@ -1846,15 +1960,7 @@ def render_ipo_calendar() -> None:
     if "ipo_tab" not in st.session_state:
         st.session_state.ipo_tab = "upcoming"
 
-    st.markdown(
-        f"""<div style="margin-bottom:8px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">IPO Calendar</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:18px;">IPO Calendar</div>""",
-        unsafe_allow_html=True,
-    )
+    _page_header("IPO Calendar", "IPO Calendar")
 
     # Tab buttons
     tabs = [("upcoming", "Upcoming"), ("priced", "Recently Priced")]
@@ -1871,7 +1977,7 @@ def render_ipo_calendar() -> None:
                 st.session_state.ipo_tab = key
                 st.rerun()
 
-    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='sierra-spacer sm'></div>", unsafe_allow_html=True)
 
     with st.spinner("Loading IPO calendar…"):
         by_sector = fetch_ipo_calendar(min_price=MIN_PRICE, max_price=MAX_PRICE)
@@ -2139,10 +2245,7 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown(
-            f"""<div style="padding:6px 0 14px;">
-              <div style="font-size:1.15rem;font-weight:700;color:{WHITE};
-                letter-spacing:-0.3px;">Sierra Trading</div>
-            </div>""",
+            "<div class='sierra-brand'>Sierra Trading</div>",
             unsafe_allow_html=True,
         )
 
@@ -2171,9 +2274,9 @@ def main() -> None:
                 k for k, (l, _, _) in branches.items() if l == selected_label
             )
 
-            st.divider()
+            st.markdown("<div class='sierra-nav-section'>Tools</div>", unsafe_allow_html=True)
             if st.button(
-                "📈 Today's Top Moves",
+                "Top Moves",
                 use_container_width=True,
                 key="top_movers_btn",
                 type="primary" if st.session_state.view == "movers" else "secondary",
@@ -2182,7 +2285,7 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "💰 Penny Watchlist",
+                "Penny Watchlist",
                 use_container_width=True,
                 key="penny_btn",
                 type="primary" if st.session_state.view == "penny" else "secondary",
@@ -2191,7 +2294,7 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "📅 IPO Calendar",
+                "IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
                 type="primary" if st.session_state.view == "ipo" else "secondary",
@@ -2200,7 +2303,7 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "📊 Backtesting",
+                "Backtesting",
                 use_container_width=True,
                 key="backtesting_btn",
                 type="primary" if st.session_state.view == "backtesting" else "secondary",
@@ -2210,25 +2313,16 @@ def main() -> None:
                 st.rerun()
 
             if st.button(
-                "📋 Changelog",
+                "Changelog",
                 use_container_width=True,
                 key="changelog_btn",
             ):
                 st.session_state.show_changelog = True
 
-            # ---------- AI Employees ----------
-            st.markdown(
-                f"""<div style="margin-top:18px;padding-top:14px;
-                  border-top:1px solid {BORDER};">
-                  <div style="font-size:0.7rem;color:{WHITE_MUTE};
-                    text-transform:uppercase;letter-spacing:1px;
-                    margin-bottom:8px;">AI Employees</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div class='sierra-nav-section'>AI Employees</div>", unsafe_allow_html=True)
 
             if st.button(
-                "🔬 Stan (Research)",
+                "Stan (Research)",
                 use_container_width=True,
                 key="stan_btn",
                 type="primary" if st.session_state.view == "stan" else "secondary",
@@ -2274,16 +2368,7 @@ def main() -> None:
         "Real Estate":            real_estate_universe,
     }[main_cat]
 
-    st.markdown(
-        f"""<div style="margin-bottom:6px;">
-          <span style="font-size:0.75rem;color:{WHITE_MUTE};
-            text-transform:uppercase;letter-spacing:1px;">
-            {main_cat} &nbsp;/&nbsp; {selected_label}</span>
-        </div>
-        <div style="font-size:2rem;font-weight:700;color:{WHITE};
-          letter-spacing:-0.5px;margin-bottom:20px;">Sierra Trading</div>""",
-        unsafe_allow_html=True,
-    )
+    _page_header(f"{main_cat} / {selected_label}", "Sierra Trading")
 
     with st.spinner("Loading market data…"):
         by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
