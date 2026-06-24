@@ -221,6 +221,15 @@ def inject_theme() -> None:
         .main .block-container {{
             padding-top: 1.8rem; padding-bottom: 2rem; max-width: 1280px;
         }}
+        /* Force all Streamlit wrappers to be transparent — prevents
+           default white backgrounds on markdown containers, element
+           wrappers, and vertical blocks. */
+        .main .block-container .element-container,
+        .main .block-container .stMarkdown,
+        .main .block-container [data-testid="stMarkdownContainer"],
+        .main .block-container [data-testid="stVerticalBlock"] > div {{
+            background: transparent !important;
+        }}
         /* Default text: white on navy */
         h1, h2, h3, h4, h5, h6, p, span, label, li, code, .stMarkdown {{
             color: {WHITE} !important;
