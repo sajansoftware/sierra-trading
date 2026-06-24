@@ -533,6 +533,34 @@ def inject_theme() -> None:
         section[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
             box-shadow: inset 3px 0 0 {WHITE};
         }}
+        /* Sidebar icon nav */
+        .sierra-icon-nav {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }}
+        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            padding: 6px 10px !important;
+            border-radius: 6px !important;
+            font-size: 0.85rem !important;
+            font-weight: 400 !important;
+            color: {WHITE_MUTE} !important;
+            transition: background 0.15s, color 0.15s;
+        }}
+        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button:hover {{
+            background: {NAVY_HOVER} !important;
+            color: {WHITE} !important;
+        }}
+        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button[kind="primary"] {{
+            background: {NAVY_HOVER} !important;
+            color: {WHITE} !important;
+            box-shadow: inset 3px 0 0 {ACCENT} !important;
+        }}
         /* Flex helpers */
         .sierra-flex-row {{
             display: flex;
@@ -2296,10 +2324,12 @@ def main() -> None:
             )
 
             st.markdown("<div class='sierra-nav-section'>Tools</div>", unsafe_allow_html=True)
+            st.markdown("<div class='sierra-icon-nav'>", unsafe_allow_html=True)
             if st.button(
                 "Top Moves",
                 use_container_width=True,
                 key="top_movers_btn",
+                icon=":material/trending_up:",
                 type="primary" if st.session_state.view == "movers" else "secondary",
             ):
                 st.session_state.view = "movers"
@@ -2309,6 +2339,7 @@ def main() -> None:
                 "Penny Watchlist",
                 use_container_width=True,
                 key="penny_btn",
+                icon=":material/savings:",
                 type="primary" if st.session_state.view == "penny" else "secondary",
             ):
                 st.session_state.view = "penny"
@@ -2318,6 +2349,7 @@ def main() -> None:
                 "IPO Calendar",
                 use_container_width=True,
                 key="ipo_calendar_btn",
+                icon=":material/calendar_month:",
                 type="primary" if st.session_state.view == "ipo" else "secondary",
             ):
                 st.session_state.view = "ipo"
@@ -2327,6 +2359,7 @@ def main() -> None:
                 "Backtesting",
                 use_container_width=True,
                 key="backtesting_btn",
+                icon=":material/history:",
                 type="primary" if st.session_state.view == "backtesting" else "secondary",
                 help="Full US universe — historical 100%+ pre-market moves, past 6 months",
             ):
@@ -2337,19 +2370,23 @@ def main() -> None:
                 "Changelog",
                 use_container_width=True,
                 key="changelog_btn",
+                icon=":material/description:",
             ):
                 st.session_state.show_changelog = True
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("<div class='sierra-nav-section'>AI Employees</div>", unsafe_allow_html=True)
-
+            st.markdown("<div class='sierra-nav-section'>Extensions</div>", unsafe_allow_html=True)
+            st.markdown("<div class='sierra-icon-nav'>", unsafe_allow_html=True)
             if st.button(
                 "Stan (Research)",
                 use_container_width=True,
                 key="stan_btn",
+                icon=":material/smart_toy:",
                 type="primary" if st.session_state.view == "stan" else "secondary",
             ):
                 st.session_state.view = "stan"
                 st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     if is_journal:
         render_journal()
