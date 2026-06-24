@@ -1544,8 +1544,7 @@ def render_top_movers() -> None:
             "Today's Top Moves",
             "Criteria: price $1\u201320 &middot; float &lt; 20M. Logged anytime "
             "within the window the stock is up \u226510% from its window-open "
-            "price (7:00 AM for main, 4:00 AM for early). A stock that pops "
-            "in both windows appears in both tabs.",
+            "price (7:00 AM for main, 4:00 AM for early).",
         )
     with _sound_col:
         st.toggle(
