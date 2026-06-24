@@ -19,6 +19,7 @@ GOOD = "#22c55e"
 
 def render_landing_page() -> None:
     """Full-width marketing page for unauthenticated visitors."""
+    # Styles — separate call so the markdown parser doesn't choke
     st.markdown(
         f"""<style>
         .landing-hero {{
@@ -122,64 +123,69 @@ def render_landing_page() -> None:
             font-weight: 700;
             margin-right: 10px;
         }}
-        </style>
+        </style>""",
+        unsafe_allow_html=True,
+    )
 
-        <div class="landing-hero">
-            <h1>Momentus</h1>
-            <div class="tagline">
-                Your pre-market edge. Real-time sector scanning, catalyst
-                tracking, and backtesting — built for small-cap traders who
-                move before the open.
-            </div>
-        </div>
+    # Hero
+    st.markdown(
+        f"<div class='landing-hero'>"
+        f"<h1>Momentus</h1>"
+        f"<div class='tagline'>"
+        f"Your pre-market edge. Real-time sector scanning, catalyst "
+        f"tracking, and backtesting &mdash; built for small-cap traders who "
+        f"move before the open."
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
 
-        <div class="feature-grid">
-            <div class="feature-card">
-                <div class="feat-icon">&#x1F4CA;</div>
-                <div class="feat-title">Sector Scanner</div>
-                <div class="feat-desc">
-                    Live screening across 11 GICS sectors with float, price,
-                    and catalyst filters. Penny watchlist included.
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feat-icon">&#x1F916;</div>
-                <div class="feat-title">AI Research</div>
-                <div class="feat-desc">
-                    Stan clusters today's catalysts and sector momentum into
-                    actionable market themes — automatically.
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feat-icon">&#x1F4C8;</div>
-                <div class="feat-title">Backtesting</div>
-                <div class="feat-desc">
-                    Six-month archive of every 100%+ pre-market move across
-                    the full US-listed universe, with source links.
-                </div>
-            </div>
-        </div>
+    # Feature grid
+    st.markdown(
+        f"<div class='feature-grid'>"
+        f"<div class='feature-card'>"
+        f"<div class='feat-icon'>&#x1F4CA;</div>"
+        f"<div class='feat-title'>Sector Scanner</div>"
+        f"<div class='feat-desc'>"
+        f"Live screening across 11 GICS sectors with float, price, "
+        f"and catalyst filters. Penny watchlist included."
+        f"</div></div>"
+        f"<div class='feature-card'>"
+        f"<div class='feat-icon'>&#x1F916;</div>"
+        f"<div class='feat-title'>AI Research</div>"
+        f"<div class='feat-desc'>"
+        f"Stan clusters today's catalysts and sector momentum into "
+        f"actionable market themes &mdash; automatically."
+        f"</div></div>"
+        f"<div class='feature-card'>"
+        f"<div class='feat-icon'>&#x1F4C8;</div>"
+        f"<div class='feat-title'>Backtesting</div>"
+        f"<div class='feat-desc'>"
+        f"Six-month archive of every 100%+ pre-market move across "
+        f"the full US-listed universe, with source links."
+        f"</div></div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-        <div class="pricing-section">
-            <div style="font-size:0.78rem;color:{WHITE_MUTE};text-transform:uppercase;
-                         letter-spacing:1px;margin-bottom:10px;">Pricing</div>
-            <div class="pricing-card">
-                <div class="price">$29</div>
-                <div class="price-period">per month</div>
-                <div class="trial-badge">7-day free trial</div>
-                <ul class="check-list">
-                    <li>Real-time pre-market scanner</li>
-                    <li>11 GICS sector dashboards</li>
-                    <li>AI-powered market themes</li>
-                    <li>100%+ move backtesting archive</li>
-                    <li>IPO calendar with deal data</li>
-                    <li>Trading journal & P&L tracking</li>
-                    <li>Penny watchlist (sub-$1)</li>
-                    <li>Alert sounds for new movers</li>
-                </ul>
-            </div>
-        </div>
-        """,
+    # Pricing
+    st.markdown(
+        f"<div class='pricing-section'>"
+        f"<div style='font-size:0.78rem;color:{WHITE_MUTE};text-transform:uppercase;"
+        f"letter-spacing:1px;margin-bottom:10px;'>Pricing</div>"
+        f"<div class='pricing-card'>"
+        f"<div class='price'>$29</div>"
+        f"<div class='price-period'>per month</div>"
+        f"<div class='trial-badge'>7-day free trial</div>"
+        f"<ul class='check-list'>"
+        f"<li>Real-time pre-market scanner</li>"
+        f"<li>11 GICS sector dashboards</li>"
+        f"<li>AI-powered market themes</li>"
+        f"<li>100%+ move backtesting archive</li>"
+        f"<li>IPO calendar with deal data</li>"
+        f"<li>Trading journal &amp; P&amp;L tracking</li>"
+        f"<li>Penny watchlist (sub-$1)</li>"
+        f"<li>Alert sounds for new movers</li>"
+        f"</ul></div></div>",
         unsafe_allow_html=True,
     )
 
