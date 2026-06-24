@@ -2232,6 +2232,24 @@ def main() -> None:
         st.session_state.show_changelog = False
         changelog_dialog()
 
+    # Top-of-dashboard ticker-lookup search bar.
+    sc1, sc2 = st.columns([6, 1])
+    with sc1:
+        search_q = st.text_input(
+            "Ticker lookup",
+            key="ticker_search",
+            label_visibility="collapsed",
+            placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
+        )
+    with sc2:
+        do_search = st.button("Look up", use_container_width=True)
+    if do_search and search_q.strip():
+        tkr = search_q.strip().upper()
+        import re as _re
+        if _re.fullmatch(r"[A-Z0-9.\-]{1,8}", tkr):
+            st.session_state.selected_ticker = tkr
+            st.rerun()
+
     def _reset_view() -> None:
         st.session_state.view = "sector"
 
@@ -2364,8 +2382,7 @@ def main() -> None:
 
     _page_header(f"{main_cat} / {selected_label}", "Sierra Trading")
 
-    with st.spinner("Loading market data…"):
-        by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
+    by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
 
     # Snapshot the qualifying tickers for this sector so the sidebar
     # changelog can report adds/drops between loads.
