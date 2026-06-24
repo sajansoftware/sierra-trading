@@ -233,6 +233,13 @@ def inject_theme() -> None:
         section[data-testid="stSidebar"] hr {{
             border-color: {BORDER}; margin: 14px 0;
         }}
+        /* Forms: remove default white container */
+        [data-testid="stForm"] {{
+            background-color: transparent !important;
+            border: 1px solid {BORDER} !important;
+            border-radius: 6px;
+            padding: 12px !important;
+        }}
         /* Buttons */
         .stButton > button, .stForm button {{
             background-color: {NAVY_CARD};
