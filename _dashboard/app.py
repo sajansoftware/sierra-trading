@@ -233,12 +233,16 @@ def inject_theme() -> None:
         section[data-testid="stSidebar"] hr {{
             border-color: {BORDER}; margin: 14px 0;
         }}
-        /* Forms: remove default white container */
-        [data-testid="stForm"] {{
+        /* Streamlit bordered wrappers (forms, containers with border=True):
+           override default white/light backgrounds with navy theme. */
+        [data-testid="stForm"],
+        [data-testid="stForm"] > div,
+        [data-testid="stVerticalBlockBorderWrapper"],
+        [data-testid="stVerticalBlockBorderWrapper"] > div,
+        .stForm {{
             background-color: transparent !important;
-            border: 1px solid {BORDER} !important;
-            border-radius: 6px;
-            padding: 12px !important;
+            background: transparent !important;
+            border-color: {BORDER} !important;
         }}
         /* Buttons */
         .stButton > button, .stForm button {{
@@ -303,7 +307,17 @@ def inject_theme() -> None:
             border: 1px solid {BORDER} !important;
         }}
         .stAlert * {{ color: {WHITE_DIM} !important; }}
-        .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
+        .stSpinner, .stSpinner > div {{
+            border-top-color: {ACCENT} !important;
+            background: transparent !important;
+        }}
+        /* Streamlit status/running widget */
+        [data-testid="stStatusWidget"],
+        [data-testid="stStatusWidget"] * {{
+            background-color: {NAVY_CARD} !important;
+            color: {WHITE_DIM} !important;
+            border-color: {BORDER} !important;
+        }}
         hr {{ border-color: {BORDER} !important; }}
         a {{ color: {ACCENT}; }}
         /* Native dataframe (trade history) */
@@ -2218,20 +2232,18 @@ def main() -> None:
         st.session_state.show_changelog = False
         changelog_dialog()
 
-    # Top-of-dashboard ticker-lookup search bar.
-    with st.form("ticker_search_form", clear_on_submit=True):
-        sc1, sc2 = st.columns([6, 1])
-        with sc1:
-            search_q = st.text_input(
-                "Ticker lookup",
-                key="ticker_search",
-                label_visibility="collapsed",
-                placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
-            )
-        with sc2:
-            do_search = st.form_submit_button(
-                "Look up", use_container_width=True,
-            )
+    # Top-of-dashboard ticker-lookup search bar (no st.form to avoid
+    # Streamlit's default white bordered container).
+    sc1, sc2 = st.columns([6, 1])
+    with sc1:
+        search_q = st.text_input(
+            "Ticker lookup",
+            key="ticker_search",
+            label_visibility="collapsed",
+            placeholder="🔎 Search any ticker — e.g. ODYS, AAPL, NVDA",
+        )
+    with sc2:
+        do_search = st.button("Look up", use_container_width=True)
     if do_search and search_q.strip():
         tkr = search_q.strip().upper()
         import re as _re
