@@ -25,7 +25,7 @@ _GENERIC_DESC = re.compile(
 )
 
 # Per https://www.sec.gov/os/accessing-edgar-data — identify yourself.
-SEC_USER_AGENT = "Sierra Trading Dashboard contact@sierra-trading.app"
+SEC_USER_AGENT = "Momentus Dashboard contact@momentus.app"
 
 SEC_HEADERS = {"User-Agent": SEC_USER_AGENT, "Accept": "application/json"}
 

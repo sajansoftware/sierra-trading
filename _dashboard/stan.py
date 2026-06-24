@@ -1,4 +1,4 @@
-"""Stan — Research AI Employee for Sierra Trading.
+"""Stan — Research AI Employee for Momentus.
 
 Scans the universe for emerging market themes by clustering catalysts
 and sector performance data. Pure-function module following the mia.py

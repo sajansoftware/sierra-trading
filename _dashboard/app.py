@@ -1,4 +1,4 @@
-"""Sierra Trading dashboard — navy theme, native Streamlit interactions.
+"""Momentus dashboard — navy theme, native Streamlit interactions.
 
 Architecture:
 - Sidebar: category selectbox + sub-sector radio + refresh.
@@ -56,6 +56,7 @@ import utilities_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 import stan as stan_module
+from landing import render_landing_page, render_auth_form
 
 ROOT = Path(__file__).parent
 
@@ -344,7 +345,7 @@ def inject_theme() -> None:
         div[role="dialog"] * {{ color: {WHITE} !important; }}
         div[role="dialog"] a {{ color: {ACCENT} !important; }}
         /* IPO and other HTML tables we render via st.markdown */
-        table.sierra-table {{
+        table.momentus-table {{
             background-color: {NAVY} !important;
             color: {WHITE};
             border-collapse: collapse;
@@ -353,24 +354,24 @@ def inject_theme() -> None:
             border-radius: 6px;
             overflow: hidden;
         }}
-        table.sierra-table th, table.sierra-table td {{
+        table.momentus-table th, table.momentus-table td {{
             background-color: {NAVY} !important;
             color: {WHITE};
         }}
-        table.sierra-table tbody tr:nth-child(even) td {{
+        table.momentus-table tbody tr:nth-child(even) td {{
             background-color: rgba(255,255,255,0.025) !important;
         }}
-        table.sierra-table tbody tr:hover td {{
+        table.momentus-table tbody tr:hover td {{
             background-color: {NAVY_HOVER} !important;
         }}
-        table.sierra-table tbody tr.sierra-clickable {{
+        table.momentus-table tbody tr.momentus-clickable {{
             cursor: pointer;
         }}
-        table.sierra-table tbody tr.sierra-clickable:hover td {{
+        table.momentus-table tbody tr.momentus-clickable:hover td {{
             background-color: {NAVY_HOVER} !important;
             box-shadow: inset 3px 0 0 {ACCENT};
         }}
-        table.sierra-table tbody tr.sierra-clickable a {{
+        table.momentus-table tbody tr.momentus-clickable a {{
             text-decoration: none !important;
             display: block;
         }}
@@ -378,7 +379,7 @@ def inject_theme() -> None:
         /* ====== REUSABLE CLASS SYSTEM ====== */
 
         /* Table header cell */
-        .sierra-th {{
+        .momentus-th {{
             padding: 10px 12px;
             border-bottom: 1px solid {BORDER};
             background: {NAVY_CARD} !important;
@@ -389,26 +390,26 @@ def inject_theme() -> None:
             letter-spacing: 0.5px;
             text-align: left;
         }}
-        .sierra-th.text-right {{ text-align: right; }}
-        .sierra-th.text-center {{ text-align: center; }}
-        .sierra-th.wide-pad {{ padding: 10px 14px; }}
+        .momentus-th.text-right {{ text-align: right; }}
+        .momentus-th.text-center {{ text-align: center; }}
+        .momentus-th.wide-pad {{ padding: 10px 14px; }}
 
         /* Table body cell */
-        .sierra-td {{
+        .momentus-td {{
             padding: 9px 12px;
             border-bottom: 1px solid {BORDER};
             color: {WHITE_DIM} !important;
             font-size: 0.9rem;
             vertical-align: top;
         }}
-        .sierra-td.text-right {{ text-align: right; }}
-        .sierra-td.text-center {{ text-align: center; }}
-        .sierra-td.narrow {{ font-size: 0.85rem; max-width: 340px; }}
-        .sierra-td.nowrap {{ white-space: nowrap; }}
-        .sierra-td.wide-pad {{ padding: 9px 14px; }}
+        .momentus-td.text-right {{ text-align: right; }}
+        .momentus-td.text-center {{ text-align: center; }}
+        .momentus-td.narrow {{ font-size: 0.85rem; max-width: 340px; }}
+        .momentus-td.nowrap {{ white-space: nowrap; }}
+        .momentus-td.wide-pad {{ padding: 9px 14px; }}
 
         /* Badge */
-        .sierra-badge {{
+        .momentus-badge {{
             display: inline-block;
             font-weight: 700;
             font-size: 0.7rem;
@@ -418,74 +419,74 @@ def inject_theme() -> None:
             color: #06121e !important;
             line-height: 1.4;
         }}
-        .sierra-badge.sm {{
+        .momentus-badge.sm {{
             font-size: 0.65rem;
             padding: 1px 6px;
             border-radius: 3px;
             text-transform: uppercase;
         }}
-        .sierra-badge.lg {{
+        .momentus-badge.lg {{
             font-size: 0.78rem;
             padding: 3px 10px;
         }}
 
         /* Ticker link */
-        .sierra-link {{
+        .momentus-link {{
             color: {WHITE} !important;
             font-weight: 700;
             text-decoration: none !important;
             border-bottom: 1px dotted {ACCENT};
         }}
-        .sierra-link:hover {{
+        .momentus-link:hover {{
             color: {ACCENT} !important;
             border-bottom-style: solid;
         }}
-        .sierra-link-ext {{
+        .momentus-link-ext {{
             color: {ACCENT} !important;
             text-decoration: none;
             font-size: 0.78rem;
             white-space: nowrap;
         }}
-        .sierra-link-ext:hover {{
+        .momentus-link-ext:hover {{
             text-decoration: underline !important;
         }}
 
         /* Cards */
-        .sierra-card {{
+        .momentus-card {{
             background: {NAVY_CARD};
             border: 1px solid {BORDER};
             border-radius: 8px;
             padding: 14px 16px;
         }}
-        .sierra-card.stat {{ text-align: center; }}
-        .sierra-card .card-label {{
+        .momentus-card.stat {{ text-align: center; }}
+        .momentus-card .card-label {{
             font-size: 0.72rem;
             color: {WHITE_MUTE} !important;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 6px;
         }}
-        .sierra-card .card-value {{
+        .momentus-card .card-value {{
             font-size: 1.35rem;
             font-weight: 700;
         }}
-        .sierra-card.event {{
+        .momentus-card.event {{
             display: flex;
             gap: 14px;
             align-items: stretch;
             padding: 12px 14px;
             margin-bottom: 10px;
         }}
-        .sierra-card.theme {{
+        .momentus-card.theme {{
             padding: 14px 18px;
             margin-bottom: 12px;
         }}
 
         /* Page header */
-        .sierra-page-header {{
+        .momentus-page-header {{
             margin-bottom: 8px;
         }}
-        .sierra-page-header .section-label {{
+        .momentus-page-header .section-label {{
             font-size: 0.75rem;
             color: {WHITE_MUTE} !important;
             text-transform: uppercase;
@@ -493,7 +494,7 @@ def inject_theme() -> None:
             display: block;
             margin-bottom: 4px;
         }}
-        .sierra-page-header .page-title {{
+        .momentus-page-header .page-title {{
             font-size: 2rem;
             font-weight: 700;
             color: {WHITE} !important;
@@ -501,7 +502,7 @@ def inject_theme() -> None:
             margin-bottom: 4px;
             line-height: 1.2;
         }}
-        .sierra-page-header .page-subtitle {{
+        .momentus-page-header .page-subtitle {{
             font-size: 0.78rem;
             color: {WHITE_DIM} !important;
             margin-bottom: 14px;
@@ -510,7 +511,7 @@ def inject_theme() -> None:
         }}
 
         /* Sidebar branding */
-        .sierra-brand {{
+        .momentus-brand {{
             padding: 6px 0 14px;
             font-size: 1.15rem;
             font-weight: 700;
@@ -519,7 +520,7 @@ def inject_theme() -> None:
             border-bottom: 2px solid {ACCENT};
             margin-bottom: 8px;
         }}
-        .sierra-nav-section {{
+        .momentus-nav-section {{
             font-size: 0.7rem;
             color: {WHITE_MUTE} !important;
             text-transform: uppercase;
@@ -534,12 +535,12 @@ def inject_theme() -> None:
             box-shadow: inset 3px 0 0 {WHITE};
         }}
         /* Sidebar icon nav */
-        .sierra-icon-nav {{
+        .momentus-icon-nav {{
             display: flex;
             flex-direction: column;
             gap: 2px;
         }}
-        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button {{
+        section[data-testid="stSidebar"] .momentus-icon-nav .stButton > button {{
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
@@ -552,33 +553,33 @@ def inject_theme() -> None:
             color: {WHITE_MUTE} !important;
             transition: background 0.15s, color 0.15s;
         }}
-        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button:hover {{
+        section[data-testid="stSidebar"] .momentus-icon-nav .stButton > button:hover {{
             background: {NAVY_HOVER} !important;
             color: {WHITE} !important;
         }}
-        section[data-testid="stSidebar"] .sierra-icon-nav .stButton > button[kind="primary"] {{
+        section[data-testid="stSidebar"] .momentus-icon-nav .stButton > button[kind="primary"] {{
             background: {NAVY_HOVER} !important;
             color: {WHITE} !important;
             box-shadow: inset 3px 0 0 {ACCENT} !important;
         }}
         /* Flex helpers */
-        .sierra-flex-row {{
+        .momentus-flex-row {{
             display: flex;
             gap: 14px;
             align-items: center;
             flex-wrap: wrap;
         }}
-        .sierra-flex-row.spread {{
+        .momentus-flex-row.spread {{
             justify-content: space-between;
         }}
-        .sierra-flex-row.baseline {{
+        .momentus-flex-row.baseline {{
             align-items: baseline;
         }}
 
         /* Spacers */
-        .sierra-spacer {{ height: 18px; }}
-        .sierra-spacer.sm {{ height: 10px; }}
-        .sierra-spacer.lg {{ height: 24px; }}
+        .momentus-spacer {{ height: 18px; }}
+        .momentus-spacer.sm {{ height: 10px; }}
+        .momentus-spacer.lg {{ height: 24px; }}
 
         /* Text utilities */
         .text-mute {{ color: {WHITE_MUTE} !important; }}
@@ -602,26 +603,26 @@ def inject_theme() -> None:
                 padding-left: 0.5rem !important;
                 padding-right: 0.5rem !important;
             }}
-            .sierra-td, .sierra-th {{
+            .momentus-td, .momentus-th {{
                 padding: 6px 8px;
                 font-size: 0.78rem;
             }}
-            .sierra-page-header .page-title {{
+            .momentus-page-header .page-title {{
                 font-size: 1.5rem;
             }}
-            .sierra-card.event {{
+            .momentus-card.event {{
                 flex-direction: column;
                 gap: 8px;
             }}
-            table.sierra-table {{
+            table.momentus-table {{
                 display: block;
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
             }}
         }}
         @media (max-width: 480px) {{
-            .sierra-td.narrow {{ max-width: 200px; }}
-            .sierra-page-header .page-subtitle {{ font-size: 0.72rem; }}
+            .momentus-td.narrow {{ max-width: 200px; }}
+            .momentus-page-header .page-subtitle {{ font-size: 0.72rem; }}
         }}
         </style>""",
         unsafe_allow_html=True,
@@ -638,7 +639,7 @@ def _page_header(section: str, title: str, subtitle: str = "") -> None:
         f"<div class='page-subtitle'>{subtitle}</div>" if subtitle else ""
     )
     st.markdown(
-        f"""<div class='sierra-page-header'>
+        f"""<div class='momentus-page-header'>
           <span class='section-label'>{section}</span>
           <div class='page-title'>{title}</div>
           {sub_html}
@@ -649,7 +650,7 @@ def _page_header(section: str, title: str, subtitle: str = "") -> None:
 
 def _badge(label: str, color: str, size: str = "") -> str:
     """Return HTML for a colored badge. size: '' (default), 'sm', 'lg'."""
-    cls = f"sierra-badge {size}".strip()
+    cls = f"momentus-badge {size}".strip()
     return f"<span class='{cls}' style='background:{color};'>{label}</span>"
 
 
@@ -657,7 +658,7 @@ def _ticker_link(ticker: str) -> str:
     """Return HTML for a clickable ticker that opens the catalyst dialog."""
     return (
         f"<a href='?ticker={ticker}' target='_self' "
-        f"class='sierra-link'>{ticker}</a>"
+        f"class='momentus-link'>{ticker}</a>"
     )
 
 
@@ -669,7 +670,7 @@ def _table_head(columns: list[tuple[str, str]], wide: bool = False) -> str:
     """
     pad_cls = " wide-pad" if wide else ""
     cells = "".join(
-        f"<th class='sierra-th{pad_cls} text-{align}'>{h}</th>"
+        f"<th class='momentus-th{pad_cls} text-{align}'>{h}</th>"
         for h, align in columns
     )
     return f"<thead><tr>{cells}</tr></thead>"
@@ -938,7 +939,7 @@ def catalyst_dialog(ticker: str) -> None:
         if r["link"] and primary_source != "—":
             primary_html = (
                 f"<a href='{r['link']}' target='_blank' "
-                f"class='sierra-link-ext'>{primary_source} ↗</a>"
+                f"class='momentus-link-ext'>{primary_source} ↗</a>"
             )
         else:
             primary_html = (
@@ -992,22 +993,22 @@ def catalyst_dialog(ticker: str) -> None:
         )
         row_link_close = "</a>"
         body_rows.append(
-            f"<tr class='sierra-clickable'>"
-            f"<td class='sierra-td nowrap text-white text-medium'>"
+            f"<tr class='momentus-clickable'>"
+            f"<td class='momentus-td nowrap text-white text-medium'>"
             f"{row_link_open}📈 {date_str}{row_link_close}</td>"
-            f"<td class='sierra-td text-right'>{row_link_open}{pm_low_cell}{row_link_close}</td>"
-            f"<td class='sierra-td text-right'>{row_link_open}{pm_high_cell}{row_link_close}</td>"
-            f"<td class='sierra-td text-right text-bold' style='color:{up_color};'>"
+            f"<td class='momentus-td text-right'>{row_link_open}{pm_low_cell}{row_link_close}</td>"
+            f"<td class='momentus-td text-right'>{row_link_open}{pm_high_cell}{row_link_close}</td>"
+            f"<td class='momentus-td text-right text-bold' style='color:{up_color};'>"
             f"{row_link_open}<span style='color:{up_color};'>+{up:.1f}%</span>{row_link_close}</td>"
-            f"<td class='sierra-td'>{type_badge}</td>"
-            f"<td class='sierra-td narrow'>"
+            f"<td class='momentus-td'>{type_badge}</td>"
+            f"<td class='momentus-td narrow'>"
             f"{row_link_open}{catalyst_text}{row_link_close}</td>"
-            f"<td class='sierra-td text-center'>{source_html}</td>"
+            f"<td class='momentus-td text-center'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
-        f"""<table class='sierra-table'>
+        f"""<table class='momentus-table'>
           {thead}
           <tbody>{''.join(body_rows)}</tbody>
         </table>""",
@@ -1065,7 +1066,7 @@ def render_sector(sector: str, folder: str, rows: list[Quote], info: dict) -> No
 # =============================================================================
 def _stat_card(label: str, value: str, color: str) -> None:
     st.markdown(
-        f"""<div class='sierra-card stat'>
+        f"""<div class='momentus-card stat'>
           <div class='card-label'>{label}</div>
           <div class='card-value' style='color:{color};'>{value}</div>
         </div>""",
@@ -1094,7 +1095,7 @@ def render_journal() -> None:
         sign = "+" if stats["avg_pnl"] >= 0 else ""
         _stat_card("Avg P&L", f"{sign}${stats['avg_pnl']:,.2f}", col)
 
-    st.markdown("<div class='sierra-spacer'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='momentus-spacer'></div>", unsafe_allow_html=True)
 
     with st.expander("Add new trade", expanded=not trades):
         with st.form("trade_form", clear_on_submit=True):
@@ -1238,9 +1239,9 @@ def changelog_dialog() -> None:
         meta_str = " &middot; ".join(meta_bits) if meta_bits else "&nbsp;"
 
         cards.append(
-            f"""<div class='sierra-card event' style='border-left:4px solid {accent_col};'>
+            f"""<div class='momentus-card event' style='border-left:4px solid {accent_col};'>
               <div style="flex:0 0 84px;">
-                <div class='sierra-badge sm' style='background:{accent_bg};
+                <div class='momentus-badge sm' style='background:{accent_bg};
                   color:{accent_col} !important;text-align:center;
                   margin-bottom:6px;display:block;'>{glyph}</div>
                 <div class='text-lg text-bold text-white'
@@ -1326,7 +1327,7 @@ def _render_movers_table(movers: list[dict],
         if r["news_link"] and source_label != "\u2014":
             source_html = (
                 f"<a href='{r['news_link']}' target='_blank' "
-                f"class='sierra-link-ext'>{source_label} \u2197</a>"
+                f"class='momentus-link-ext'>{source_label} \u2197</a>"
             )
         else:
             source_html = (
@@ -1379,21 +1380,21 @@ def _render_movers_table(movers: list[dict],
 
         body_rows.append(
             f"<tr>"
-            f"<td class='sierra-td'>{ticker_html}</td>"
-            f"<td class='sierra-td'>{sector_html}</td>"
-            f"<td class='sierra-td'>{country_html}</td>"
-            f"<td class='sierra-td text-right'>{ref_cell}</td>"
-            f"<td class='sierra-td text-right'>{high_cell}</td>"
-            f"<td class='sierra-td text-right text-bold' "
+            f"<td class='momentus-td'>{ticker_html}</td>"
+            f"<td class='momentus-td'>{sector_html}</td>"
+            f"<td class='momentus-td'>{country_html}</td>"
+            f"<td class='momentus-td text-right'>{ref_cell}</td>"
+            f"<td class='momentus-td text-right'>{high_cell}</td>"
+            f"<td class='momentus-td text-right text-bold' "
             f"style='color:{move_color};'>+{move:.1f}%</td>"
-            f"<td class='sierra-td'>{type_badge}</td>"
-            f"<td class='sierra-td narrow'>{catalyst_text}</td>"
-            f"<td class='sierra-td text-center'>{source_html}</td>"
+            f"<td class='momentus-td'>{type_badge}</td>"
+            f"<td class='momentus-td narrow'>{catalyst_text}</td>"
+            f"<td class='momentus-td text-center'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
-        f"""<table class='sierra-table'>
+        f"""<table class='momentus-table'>
           {thead}
           <tbody>{''.join(body_rows)}</tbody>
         </table>""",
@@ -1654,7 +1655,7 @@ def render_stan_research() -> None:
                 f"{sign}{chg:.1f}%</span></span>"
             )
         st.markdown(
-            f"<div class='sierra-card' style='overflow-x:auto;"
+            f"<div class='momentus-card' style='overflow-x:auto;"
             f"white-space:nowrap;margin-bottom:18px;'>"
             f"<div class='text-xs text-mute text-upper'"
             f" style='margin-bottom:6px;'>Sector Performance</div>"
@@ -1676,7 +1677,7 @@ def render_stan_research() -> None:
         color = _THEME_COLORS[i % len(_THEME_COLORS)]
         ticker_links = " ".join(
             f"<a href='?ticker={t}' target='_self' "
-            f"class='sierra-link' style='margin-right:8px;"
+            f"class='momentus-link' style='margin-right:8px;"
             f"font-size:0.82rem;'>{t}</a>"
             for t in theme.tickers
         )
@@ -1698,9 +1699,9 @@ def render_stan_research() -> None:
         )
 
         st.markdown(
-            f"""<div class='sierra-card theme'
+            f"""<div class='momentus-card theme'
               style='border-left:4px solid {color};'>
-              <div class='sierra-flex-row spread'
+              <div class='momentus-flex-row spread'
                 style='margin-bottom:6px;'>
                 <span class='text-lg text-bold text-white'>
                   #{theme.rank} {theme.name}</span>
@@ -1757,14 +1758,14 @@ def _ipo_row(ipo: IPO) -> str:
     exch = ipo.exchange or "—"
     return (
         f"<tr>"
-        f"<td class='sierra-td wide-pad text-bold'>{ipo.ticker}</td>"
-        f"<td class='sierra-td wide-pad text-dim'>{ipo.company}</td>"
-        f"<td class='sierra-td wide-pad text-right' style='font-weight:600;'>{ipo.price_display}</td>"
-        f"<td class='sierra-td wide-pad' style='font-weight:500;'>{date_str}</td>"
-        f"<td class='sierra-td wide-pad text-dim text-right'>{shares}</td>"
-        f"<td class='sierra-td wide-pad text-dim text-right'>{deal}</td>"
-        f"<td class='sierra-td wide-pad text-mute'>{exch}</td>"
-        f"<td class='sierra-td wide-pad'>{_badge(ipo.status, status_col, 'lg')}</td>"
+        f"<td class='momentus-td wide-pad text-bold'>{ipo.ticker}</td>"
+        f"<td class='momentus-td wide-pad text-dim'>{ipo.company}</td>"
+        f"<td class='momentus-td wide-pad text-right' style='font-weight:600;'>{ipo.price_display}</td>"
+        f"<td class='momentus-td wide-pad' style='font-weight:500;'>{date_str}</td>"
+        f"<td class='momentus-td wide-pad text-dim text-right'>{shares}</td>"
+        f"<td class='momentus-td wide-pad text-dim text-right'>{deal}</td>"
+        f"<td class='momentus-td wide-pad text-mute'>{exch}</td>"
+        f"<td class='momentus-td wide-pad'>{_badge(ipo.status, status_col, 'lg')}</td>"
         f"</tr>"
     )
 
@@ -1795,7 +1796,7 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
     ], wide=True)
     body = "".join(_ipo_row(r) for r in rows)
     st.markdown(
-        f"""<table class="sierra-table">
+        f"""<table class="momentus-table">
           {thead}
           <tbody>{body}</tbody>
         </table>""",
@@ -1857,7 +1858,7 @@ def render_backtesting() -> None:
     with c4:
         _stat_card("Reviewed", f"{s.get('reviewed_moves', 0):,}", WHITE_DIM)
     st.markdown(
-        f"""<div class='sierra-flex-row' style='margin:10px 0 18px;font-size:0.78rem;'>
+        f"""<div class='momentus-flex-row' style='margin:10px 0 18px;font-size:0.78rem;'>
           <span class='text-mute'>Coverage: {s.get('earliest_date') or '\u2014'} \u2192 {s.get('latest_date') or '\u2014'}</span>
           <span class='text-mute'>Scanned: {done:,} / {to_scan:,} ({pct:.0f}%)</span>
           <span class='text-mute'>Last run: {s.get('last_run_ts') or '\u2014'}</span>
@@ -1955,7 +1956,7 @@ def render_backtesting() -> None:
         if link and src != "\u2014":
             source_link_html = (
                 f"<a href='{link}' target='_blank' "
-                f"class='sierra-link-ext'>{src} \u2197</a>"
+                f"class='momentus-link-ext'>{src} \u2197</a>"
             )
         else:
             source_link_html = (
@@ -1987,22 +1988,22 @@ def render_backtesting() -> None:
         row_opacity = "style='opacity:0.55;'" if reviewed else ""
         body_rows.append(
             f"<tr {row_opacity}>"
-            f"<td class='sierra-td nowrap' style='color:{WHITE};"
+            f"<td class='momentus-td nowrap' style='color:{WHITE};"
             f"font-weight:500;'>{date_str}</td>"
-            f"<td class='sierra-td'>{ticker_html}</td>"
-            f"<td class='sierra-td'>{sector_html}</td>"
-            f"<td class='sierra-td text-right'>{pm_low_cell}</td>"
-            f"<td class='sierra-td text-right'>{pm_high_cell}</td>"
-            f"<td class='sierra-td text-right text-bold' style='color:{move_color};'>"
+            f"<td class='momentus-td'>{ticker_html}</td>"
+            f"<td class='momentus-td'>{sector_html}</td>"
+            f"<td class='momentus-td text-right'>{pm_low_cell}</td>"
+            f"<td class='momentus-td text-right'>{pm_high_cell}</td>"
+            f"<td class='momentus-td text-right text-bold' style='color:{move_color};'>"
             f"+{upside:.1f}%</td>"
-            f"<td class='sierra-td'>{type_badge}</td>"
-            f"<td class='sierra-td narrow'>{catalyst_text}</td>"
-            f"<td class='sierra-td text-center nowrap'>{source_html}</td>"
+            f"<td class='momentus-td'>{type_badge}</td>"
+            f"<td class='momentus-td narrow'>{catalyst_text}</td>"
+            f"<td class='momentus-td text-center nowrap'>{source_html}</td>"
             f"</tr>"
         )
 
     st.markdown(
-        f"<table class='sierra-table'>"
+        f"<table class='momentus-table'>"
         f"{thead}"
         f"<tbody>{''.join(body_rows)}</tbody></table>",
         unsafe_allow_html=True,
@@ -2030,7 +2031,7 @@ def render_ipo_calendar() -> None:
                 st.session_state.ipo_tab = key
                 st.rerun()
 
-    st.markdown("<div class='sierra-spacer sm'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='momentus-spacer sm'></div>", unsafe_allow_html=True)
 
     with st.spinner("Loading IPO calendar…"):
         by_sector = fetch_ipo_calendar(min_price=MIN_PRICE, max_price=MAX_PRICE)
@@ -2201,12 +2202,28 @@ def _kickoff_backtest_archive_worker() -> None:
 # =============================================================================
 def main() -> None:
     st.set_page_config(
-        page_title="Sierra Trading",
+        page_title="Momentus",
         page_icon="📈",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     inject_theme()
+
+    # ---------- Auth gate ----------
+    if not st.session_state.get("authenticated"):
+        # Hide sidebar for unauthenticated visitors
+        st.markdown(
+            "<style>"
+            "section[data-testid='stSidebar'] { display: none; }"
+            "button[data-testid='stSidebarCollapsedControl'] { display: none; }"
+            "</style>",
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("show_auth"):
+            render_auth_form()
+        else:
+            render_landing_page()
+        return
 
     # Backtest archive worker — scans tickers for ≥50% PM moves and
     # writes them to .pm_backtest_cache.json. Capped at 200 tickers per
@@ -2293,7 +2310,7 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown(
-            "<div class='sierra-brand'>Sierra Trading</div>",
+            "<div class='momentus-brand'>Momentus</div>",
             unsafe_allow_html=True,
         )
 
@@ -2322,8 +2339,8 @@ def main() -> None:
                 k for k, (l, _, _) in branches.items() if l == selected_label
             )
 
-            st.markdown("<div class='sierra-nav-section'>Tools</div>", unsafe_allow_html=True)
-            st.markdown("<div class='sierra-icon-nav'>", unsafe_allow_html=True)
+            st.markdown("<div class='momentus-nav-section'>Tools</div>", unsafe_allow_html=True)
+            st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
             if st.button(
                 "Top Moves",
                 use_container_width=True,
@@ -2374,8 +2391,8 @@ def main() -> None:
                 st.session_state.show_changelog = True
             st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("<div class='sierra-nav-section'>Extensions</div>", unsafe_allow_html=True)
-            st.markdown("<div class='sierra-icon-nav'>", unsafe_allow_html=True)
+            st.markdown("<div class='momentus-nav-section'>Extensions</div>", unsafe_allow_html=True)
+            st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
             if st.button(
                 "Stan (Research)",
                 use_container_width=True,
@@ -2386,6 +2403,12 @@ def main() -> None:
                 st.session_state.view = "stan"
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("---")
+        if st.button("Logout", key="logout_btn", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.pop("user_email", None)
+            st.rerun()
 
     if is_journal:
         render_journal()
@@ -2425,7 +2448,7 @@ def main() -> None:
         "Real Estate":            real_estate_universe,
     }[main_cat]
 
-    _page_header(f"{main_cat} / {selected_label}", "Sierra Trading")
+    _page_header(f"{main_cat} / {selected_label}", "Momentus")
 
     by_cat = filtered_by_category(uni_mod.UNIVERSE(), uni_mod.all_tickers())
 
