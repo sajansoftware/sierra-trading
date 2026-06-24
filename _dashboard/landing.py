@@ -19,128 +19,36 @@ GOOD = "#22c55e"
 
 def render_landing_page() -> None:
     """Full-width marketing page for unauthenticated visitors."""
-    # Styles — separate call so the markdown parser doesn't choke
-    st.markdown(
-        f"""<style>
-        .landing-hero {{
-            text-align: center;
-            padding: 80px 20px 40px;
-        }}
-        .landing-hero h1 {{
-            font-size: 3.2rem;
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 12px;
-        }}
-        .landing-hero .tagline {{
-            font-size: 1.15rem;
-            color: {WHITE_DIM} !important;
-            max-width: 600px;
-            margin: 0 auto 32px;
-            line-height: 1.6;
-        }}
-        .feature-grid {{
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            max-width: 900px;
-            margin: 0 auto 48px;
-            padding: 0 20px;
-        }}
-        @media (max-width: 768px) {{
-            .feature-grid {{ grid-template-columns: 1fr; }}
-            .landing-hero h1 {{ font-size: 2.2rem; }}
-        }}
-        .feature-card {{
-            background: {NAVY_CARD};
-            border: 1px solid {BORDER};
-            border-radius: 10px;
-            padding: 24px 20px;
-            text-align: center;
-        }}
-        .feature-card .feat-icon {{
-            font-size: 2rem;
-            margin-bottom: 10px;
-        }}
-        .feature-card .feat-title {{
-            font-size: 1rem;
-            font-weight: 700;
-            color: {WHITE} !important;
-            margin-bottom: 6px;
-        }}
-        .feature-card .feat-desc {{
-            font-size: 0.85rem;
-            color: {WHITE_MUTE} !important;
-            line-height: 1.5;
-        }}
-        .pricing-section {{
-            text-align: center;
-            padding: 40px 20px;
-        }}
-        .pricing-card {{
-            background: {NAVY_CARD};
-            border: 2px solid {ACCENT};
-            border-radius: 12px;
-            padding: 32px 28px;
-            max-width: 380px;
-            margin: 0 auto;
-        }}
-        .pricing-card .price {{
-            font-size: 2.8rem;
-            font-weight: 800;
-            color: {WHITE} !important;
-            margin-bottom: 4px;
-        }}
-        .pricing-card .price-period {{
-            font-size: 0.9rem;
-            color: {WHITE_MUTE} !important;
-            margin-bottom: 4px;
-        }}
-        .pricing-card .trial-badge {{
-            display: inline-block;
-            background: {ACCENT};
-            color: #06121e !important;
-            font-weight: 700;
-            font-size: 0.78rem;
-            padding: 4px 12px;
-            border-radius: 20px;
-            margin-bottom: 18px;
-        }}
-        .pricing-card .check-list {{
-            text-align: left;
-            list-style: none;
-            padding: 0;
-            margin: 0 0 24px;
-        }}
-        .pricing-card .check-list li {{
-            padding: 6px 0;
-            font-size: 0.9rem;
-            color: {WHITE_DIM} !important;
-        }}
-        .pricing-card .check-list li::before {{
-            content: "\\2713";
-            color: {GOOD};
-            font-weight: 700;
-            margin-right: 10px;
-        }}
-        </style>""",
-        unsafe_allow_html=True,
-    )
+    # Use st.html() for all content — it renders directly without
+    # markdown processing, which st.markdown() interferes with on
+    # nested div structures even with unsafe_allow_html=True.
 
     # Hero
-    st.markdown(
+    st.html(
+        f"<style>"
+        f".landing-hero {{ text-align:center; padding:80px 20px 40px; }}"
+        f".landing-hero h1 {{ font-size:3.2rem; font-weight:800; letter-spacing:-1px; margin-bottom:12px; color:{WHITE}; }}"
+        f".landing-hero .tagline {{ font-size:1.15rem; color:{WHITE_DIM}; max-width:600px; margin:0 auto 32px; line-height:1.6; }}"
+        f"</style>"
         f"<div class='landing-hero'>"
         f"<h1>Momentus</h1>"
         f"<div class='tagline'>"
         f"Your pre-market edge. Real-time sector scanning, catalyst "
         f"tracking, and backtesting &mdash; built for small-cap traders who "
         f"move before the open."
-        f"</div></div>",
-        unsafe_allow_html=True,
+        f"</div></div>"
     )
 
     # Feature grid
-    st.markdown(
+    st.html(
+        f"<style>"
+        f".feature-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:900px; margin:0 auto 48px; padding:0 20px; }}"
+        f"@media (max-width:768px) {{ .feature-grid {{ grid-template-columns:1fr; }} }}"
+        f".feature-card {{ background:{NAVY_CARD}; border:1px solid {BORDER}; border-radius:10px; padding:24px 20px; text-align:center; }}"
+        f".feature-card .feat-icon {{ font-size:2rem; margin-bottom:10px; }}"
+        f".feature-card .feat-title {{ font-size:1rem; font-weight:700; color:{WHITE}; margin-bottom:6px; }}"
+        f".feature-card .feat-desc {{ font-size:0.85rem; color:{WHITE_MUTE}; line-height:1.5; }}"
+        f"</style>"
         f"<div class='feature-grid'>"
         f"<div class='feature-card'>"
         f"<div class='feat-icon'>&#x1F4CA;</div>"
@@ -163,12 +71,21 @@ def render_landing_page() -> None:
         f"Six-month archive of every 100%+ pre-market move across "
         f"the full US-listed universe, with source links."
         f"</div></div>"
-        f"</div>",
-        unsafe_allow_html=True,
+        f"</div>"
     )
 
     # Pricing
-    st.markdown(
+    st.html(
+        f"<style>"
+        f".pricing-section {{ text-align:center; padding:40px 20px; }}"
+        f".pricing-card {{ background:{NAVY_CARD}; border:2px solid {ACCENT}; border-radius:12px; padding:32px 28px; max-width:380px; margin:0 auto; }}"
+        f".pricing-card .price {{ font-size:2.8rem; font-weight:800; color:{WHITE}; margin-bottom:4px; }}"
+        f".pricing-card .price-period {{ font-size:0.9rem; color:{WHITE_MUTE}; margin-bottom:4px; }}"
+        f".pricing-card .trial-badge {{ display:inline-block; background:{ACCENT}; color:#06121e; font-weight:700; font-size:0.78rem; padding:4px 12px; border-radius:20px; margin-bottom:18px; }}"
+        f".pricing-card .check-list {{ text-align:left; list-style:none; padding:0; margin:0 0 24px; }}"
+        f".pricing-card .check-list li {{ padding:6px 0; font-size:0.9rem; color:{WHITE_DIM}; }}"
+        f".pricing-card .check-list li::before {{ content:'\\2713'; color:{GOOD}; font-weight:700; margin-right:10px; }}"
+        f"</style>"
         f"<div class='pricing-section'>"
         f"<div style='font-size:0.78rem;color:{WHITE_MUTE};text-transform:uppercase;"
         f"letter-spacing:1px;margin-bottom:10px;'>Pricing</div>"
@@ -185,8 +102,7 @@ def render_landing_page() -> None:
         f"<li>Trading journal &amp; P&amp;L tracking</li>"
         f"<li>Penny watchlist (sub-$1)</li>"
         f"<li>Alert sounds for new movers</li>"
-        f"</ul></div></div>",
-        unsafe_allow_html=True,
+        f"</ul></div></div>"
     )
 
     # CTA button — switch to auth form
