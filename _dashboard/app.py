@@ -56,7 +56,6 @@ import utilities_universe
 import trading_journal
 from ipo_calendar import fetch_ipo_calendar, IPO
 import stan as stan_module
-from landing import render_landing_page, render_auth_form
 
 ROOT = Path(__file__).parent
 
@@ -2209,22 +2208,6 @@ def main() -> None:
     )
     inject_theme()
 
-    # ---------- Auth gate ----------
-    if not st.session_state.get("authenticated"):
-        # Hide sidebar for unauthenticated visitors
-        st.markdown(
-            "<style>"
-            "section[data-testid='stSidebar'] { display: none; }"
-            "button[data-testid='stSidebarCollapsedControl'] { display: none; }"
-            "</style>",
-            unsafe_allow_html=True,
-        )
-        if st.session_state.get("show_auth"):
-            render_auth_form()
-        else:
-            render_landing_page()
-        return
-
     # Backtest archive worker — scans tickers for ≥50% PM moves and
     # writes them to .pm_backtest_cache.json. Capped at 200 tickers per
     # process run; resumes via is_stale gating on next start.
@@ -2403,12 +2386,6 @@ def main() -> None:
                 st.session_state.view = "stan"
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        if st.button("Logout", key="logout_btn", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.pop("user_email", None)
-            st.rerun()
 
     if is_journal:
         render_journal()
