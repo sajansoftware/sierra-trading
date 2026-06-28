@@ -201,9 +201,9 @@ SECTORS: dict[str, dict[str, tuple[str, str, Path]]] = {
 # =============================================================================
 # Theme
 # =============================================================================
-def inject_theme() -> None:
-    st.markdown(
-        f"""<style>
+@st.cache_resource
+def _theme_css() -> str:
+    return f"""<style>
         /* Hide the deploy menu + footer but KEEP the header so the
            sidebar toggle chevron stays visible. */
         #MainMenu, footer {{ visibility: hidden; }}
@@ -623,9 +623,11 @@ def inject_theme() -> None:
             .momentus-td.narrow {{ max-width: 200px; }}
             .momentus-page-header .page-subtitle {{ font-size: 0.72rem; }}
         }}
-        </style>""",
-        unsafe_allow_html=True,
-    )
+        </style>"""
+
+
+def inject_theme() -> None:
+    st.markdown(_theme_css(), unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -1423,7 +1425,7 @@ def _ping_sound_b64() -> str:
     return base64.b64encode(raw).decode()
 
 
-@st.fragment(run_every="30s")
+@st.fragment(run_every="90s")
 def _top_movers_fragment(
     pool: tuple[str, ...],
     sector_lookup: dict[str, tuple[str, str]],
@@ -1807,6 +1809,9 @@ def _ipo_section(sector: str, rows: list[IPO]) -> None:
 # Backtesting — 6-month archive of ≥50% pre-market moves
 # =============================================================================
 def render_backtesting() -> None:
+    # Lazily start the background scanner on first visit.
+    _kickoff_backtest_archive_worker()
+
     from backtest_archive import (
         list_moves, stats as bt_stats, MIN_MOVE_PCT, LOOKBACK_DAYS,
     )
@@ -2208,11 +2213,6 @@ def main() -> None:
     )
     inject_theme()
 
-    # Backtest archive worker — scans tickers for ≥50% PM moves and
-    # writes them to .pm_backtest_cache.json. Capped at 200 tickers per
-    # process run; resumes via is_stale gating on next start.
-    _kickoff_backtest_archive_worker()
-
     if "selected_ticker" not in st.session_state:
         st.session_state.selected_ticker = None
     if "view" not in st.session_state:
@@ -2322,70 +2322,70 @@ def main() -> None:
                 k for k, (l, _, _) in branches.items() if l == selected_label
             )
 
-            st.markdown("<div class='momentus-nav-section'>Tools</div>", unsafe_allow_html=True)
-            st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
-            if st.button(
-                "Top Moves",
-                use_container_width=True,
-                key="top_movers_btn",
-                icon=":material/trending_up:",
-                type="primary" if st.session_state.view == "movers" else "secondary",
-            ):
-                st.session_state.view = "movers"
-                st.rerun()
+        st.markdown("<div class='momentus-nav-section'>Tools</div>", unsafe_allow_html=True)
+        st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
+        if st.button(
+            "Top Moves",
+            use_container_width=True,
+            key="top_movers_btn",
+            icon=":material/trending_up:",
+            type="primary" if st.session_state.view == "movers" else "secondary",
+        ):
+            st.session_state.view = "movers"
+            st.rerun()
 
-            if st.button(
-                "Penny Watchlist",
-                use_container_width=True,
-                key="penny_btn",
-                icon=":material/savings:",
-                type="primary" if st.session_state.view == "penny" else "secondary",
-            ):
-                st.session_state.view = "penny"
-                st.rerun()
+        if st.button(
+            "Penny Watchlist",
+            use_container_width=True,
+            key="penny_btn",
+            icon=":material/savings:",
+            type="primary" if st.session_state.view == "penny" else "secondary",
+        ):
+            st.session_state.view = "penny"
+            st.rerun()
 
-            if st.button(
-                "IPO Calendar",
-                use_container_width=True,
-                key="ipo_calendar_btn",
-                icon=":material/calendar_month:",
-                type="primary" if st.session_state.view == "ipo" else "secondary",
-            ):
-                st.session_state.view = "ipo"
-                st.rerun()
+        if st.button(
+            "IPO Calendar",
+            use_container_width=True,
+            key="ipo_calendar_btn",
+            icon=":material/calendar_month:",
+            type="primary" if st.session_state.view == "ipo" else "secondary",
+        ):
+            st.session_state.view = "ipo"
+            st.rerun()
 
-            if st.button(
-                "Backtesting",
-                use_container_width=True,
-                key="backtesting_btn",
-                icon=":material/history:",
-                type="primary" if st.session_state.view == "backtesting" else "secondary",
-                help="Full US universe — historical 100%+ pre-market moves, past 6 months",
-            ):
-                st.session_state.view = "backtesting"
-                st.rerun()
+        if st.button(
+            "Backtesting",
+            use_container_width=True,
+            key="backtesting_btn",
+            icon=":material/history:",
+            type="primary" if st.session_state.view == "backtesting" else "secondary",
+            help="Full US universe — historical 100%+ pre-market moves, past 6 months",
+        ):
+            st.session_state.view = "backtesting"
+            st.rerun()
 
-            if st.button(
-                "Changelog",
-                use_container_width=True,
-                key="changelog_btn",
-                icon=":material/description:",
-            ):
-                st.session_state.show_changelog = True
-            st.markdown("</div>", unsafe_allow_html=True)
+        if st.button(
+            "Changelog",
+            use_container_width=True,
+            key="changelog_btn",
+            icon=":material/description:",
+        ):
+            st.session_state.show_changelog = True
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("<div class='momentus-nav-section'>Extensions</div>", unsafe_allow_html=True)
-            st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
-            if st.button(
-                "Stan (Research)",
-                use_container_width=True,
-                key="stan_btn",
-                icon=":material/smart_toy:",
-                type="primary" if st.session_state.view == "stan" else "secondary",
-            ):
-                st.session_state.view = "stan"
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='momentus-nav-section'>Extensions</div>", unsafe_allow_html=True)
+        st.markdown("<div class='momentus-icon-nav'>", unsafe_allow_html=True)
+        if st.button(
+            "Stan (Research)",
+            use_container_width=True,
+            key="stan_btn",
+            icon=":material/smart_toy:",
+            type="primary" if st.session_state.view == "stan" else "secondary",
+        ):
+            st.session_state.view = "stan"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if is_journal:
         render_journal()
