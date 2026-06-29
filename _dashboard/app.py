@@ -1310,6 +1310,7 @@ def _render_movers_table(movers: list[dict],
         ("Ref Price", "right"),     # price at window-open (7:00 or 4:00)
         ("PM High", "right"),       # peak hit in window
         ("Move", "right"),          # gain from ref
+        ("PM Vol", "right"),        # pre-market volume
         ("Type", "left"),
         ("Catalyst", "left"), ("Source", "center"),
     ])
@@ -1379,6 +1380,14 @@ def _render_movers_table(movers: list[dict],
                if high_time else "")
         )
 
+        pm_vol = r.get("pm_volume") or 0
+        if pm_vol >= 1_000_000:
+            vol_str = f"{pm_vol / 1_000_000:.1f}M"
+        elif pm_vol >= 1_000:
+            vol_str = f"{pm_vol / 1_000:.0f}K"
+        else:
+            vol_str = f"{pm_vol:,}"
+
         body_rows.append(
             f"<tr>"
             f"<td class='momentus-td'>{ticker_html}</td>"
@@ -1388,6 +1397,8 @@ def _render_movers_table(movers: list[dict],
             f"<td class='momentus-td text-right'>{high_cell}</td>"
             f"<td class='momentus-td text-right text-bold' "
             f"style='color:{move_color};'>+{move:.1f}%</td>"
+            f"<td class='momentus-td text-right'>"
+            f"<span class='text-dim'>{vol_str}</span></td>"
             f"<td class='momentus-td'>{type_badge}</td>"
             f"<td class='momentus-td narrow'>{catalyst_text}</td>"
             f"<td class='momentus-td text-center'>{source_html}</td>"
@@ -1530,7 +1541,7 @@ def _top_movers_fragment(
             why = (" The 4:00–7:00 AM window is still in the future.")
         st.info(
             f"No tickers met the criteria (≥10% from window-open · "
-            f"$1–$20 · float <20M) between {window_start} and "
+            f"$1–$20 · float <20M · vol >500K) between {window_start} and "
             f"{window_end} ET today.{why}"
         )
         return

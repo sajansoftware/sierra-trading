@@ -317,6 +317,7 @@ def fetch_top_movers_dual(
     min_price: float = 1.0,
     max_price: float = 20.0,
     max_float: int = 20_000_000,
+    min_volume: int = 500_000,
     max_rows: int = 100,
 ) -> dict[str, list[dict]]:
     """One scan, two slices — returns {"main": [...], "early": [...]}.
@@ -410,6 +411,9 @@ def fetch_top_movers_dual(
                 high_time = pm_high_ts.strftime("%H:%M ET")
             except Exception:
                 high_time = ""
+            pm_vol = int(pm["Volume"].sum()) if "Volume" in pm.columns else 0
+            if pm_vol < min_volume:
+                return None
             return {
                 "ticker":     q.ticker,
                 "name":       q.name or q.ticker,
@@ -418,6 +422,7 @@ def fetch_top_movers_dual(
                 "hod":        pm_high,
                 "move_pct":   move_pct,
                 "float":      q.float_shares,
+                "pm_volume":  pm_vol,
                 "ref_time":   ref_time,
                 "high_time":  high_time,
                 "country":    q.country or "",
@@ -643,6 +648,7 @@ def fetch_top_movers(
     min_price: float = 1.0,
     max_price: float = 20.0,
     max_float: int = 20_000_000,
+    min_volume: int = 500_000,
     max_rows: int = 100,
     window_start: str = "07:00",
     window_end:   str = "09:29",
@@ -748,6 +754,9 @@ def fetch_top_movers(
                 high_time = pm_high_ts.strftime("%H:%M ET")
             except Exception:
                 high_time = ""
+            pm_vol = int(pm_bars["Volume"].sum()) if "Volume" in pm_bars.columns else 0
+            if pm_vol < min_volume:
+                return None
             return {
                 "ticker":     q.ticker,
                 "name":       q.name or q.ticker,
@@ -756,6 +765,7 @@ def fetch_top_movers(
                 "hod":        pm_high,          # actual peak in window
                 "move_pct":   move_pct,         # gain from ref
                 "float":      q.float_shares,
+                "pm_volume":  pm_vol,
                 "ref_time":   ref_time,         # e.g. "07:00 ET"
                 "high_time":  high_time,
                 "country":    q.country or "",
